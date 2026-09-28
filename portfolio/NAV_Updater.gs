@@ -18,6 +18,20 @@ const NAV_SOURCE_URL_KKP = 'https://www.krungsri.com/th/personal/mutual-fund/net
 const NAV_TAB = 'FundMaster';
 const NAV_HISTORY_TAB = 'FundNAV_History';
 const NAV_UPDATE_HOUR = 19; // Asia/Bangkok
+const NAV_STATUS_TAB = 'NAV_Update_Log';
+
+function ensureNavStatusSheet_(){
+  const ss=SpreadsheetApp.getActive();
+  let sh=ss.getSheetByName(NAV_STATUS_TAB);
+  if(!sh) sh=ss.insertSheet(NAV_STATUS_TAB);
+  if(sh.getLastRow()===0){ sh.getRange(1,1,1,6).setValues([['Updated At','Status','Updated Funds','History Rows','Details','Last Error']]); sh.setFrozenRows(1); }
+  return sh;
+}
+
+function logNavRun_(status, updated, history, details, error){
+  const sh=ensureNavStatusSheet_();
+  sh.appendRow([new Date(),status,updated||0,history||0,details||'',error||'']);
+}
 
 function ensureNavHistorySheet_(){
   const ss = SpreadsheetApp.getActive();
@@ -149,8 +163,9 @@ function writeNavUpdates_(ctx,updates,sourceLabel){
 }
 
 function updateAllNAVs(){
+  const started=new Date();
   const ctx=collectFundMasterRows_();
-  if(!ctx.rows.length)return {updated:0,history:0,message:'FundMaster ยังไม่มีข้อมูล'};
+  if(!ctx.rows.length){ logNavRun_('NO_DATA',0,0,'FundMaster ยังไม่มีข้อมูล',''); return {updated:0,history:0,message:'FundMaster ยังไม่มีข้อมูล'}; }
   let totalUpdated=0,totalHistory=0;
 
   // SCBAM
@@ -183,11 +198,24 @@ function updateAllNAVs(){
 
   const now=new Date();
   PropertiesService.getDocumentProperties().setProperty('NAV_LAST_UPDATE',now.toISOString());
-  return {updated:totalUpdated,history:totalHistory,at:now.toISOString()};
+  logNavRun_(totalUpdated>0?'SUCCESS':'NO_UPDATE',totalUpdated,totalHistory,'SCBAM + TALIS + KKPAM', '');
+  return {updated:totalUpdated,history:totalHistory,at:now.toISOString(),started:started.toISOString()};
 }
 
 // Backward-compatible menu/function name.
 function updateSCBAMNavs(){ return updateAllNAVs(); }
+
+function updateNAVNow(){
+  const ui=SpreadsheetApp.getUi();
+  try{
+    const r=updateAllNAVs();
+    ui.alert('NAV Update', 'อัปเดตสำเร็จ\n\nกองทุนที่อัปเดต: '+(r.updated||0)+' กองทุน\nประวัติที่เพิ่ม: '+(r.history||0)+' แถว', ui.ButtonSet.OK);
+  }catch(e){
+    logNavRun_('ERROR',0,0,'updateNAVNow',String(e&&e.message||e));
+    ui.alert('NAV Update Error', String(e&&e.message||e), ui.ButtonSet.OK);
+    throw e;
+  }
+}
 
 function setupNAVAutoUpdate(){
   ScriptApp.getProjectTriggers().forEach(t=>{
@@ -195,12 +223,22 @@ function setupNAVAutoUpdate(){
     if(fn==='updateSCBAMNavs'||fn==='updateAllNAVs')ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('updateAllNAVs').timeBased().everyDays(1).atHour(NAV_UPDATE_HOUR).create();
-  return updateAllNAVs();
+  const r=updateAllNAVs();
+  try{ SpreadsheetApp.getUi().alert('ตั้งค่า NAV สำเร็จ','ตั้ง Auto Update ทุกวันเรียบร้อยแล้ว\nอัปเดตครั้งแรก: '+(r.updated||0)+' กองทุน',SpreadsheetApp.getUi().ButtonSet.OK); }catch(e){}
+  return r;
 }
 
 function onOpen(){
-  SpreadsheetApp.getUi().createMenu('My Family Funds')
-    .addItem('อัปเดต NAV ทุกกองตอนนี้','updateAllNAVs')
-    .addItem('ตั้งเวลาอัปเดต NAV ทุกวัน','setupNAVAutoUpdate')
+  SpreadsheetApp.getUi().createMenu('My Funds NAV')
+    .addItem('🔄 อัปเดต NAV ตอนนี้','updateNAVNow')
+    .addItem('⚙️ ตั้ง Auto Update ทุกวัน','setupNAVAutoUpdate')
+    .addSeparator()
+    .addItem('📊 เปิด NAV History','openNAVHistory_')
+    .addItem('🧾 เปิด NAV Update Log','openNAVLog_')
     .addToUi();
 }
+
+function openNAVHistory_(){ const sh=ensureNavHistorySheet_(); SpreadsheetApp.setActiveSheet(sh); }
+function openNAVLog_(){ const sh=ensureNavStatusSheet_(); SpreadsheetApp.setActiveSheet(sh); }
+
+function onInstall(e){ onOpen(e); }
