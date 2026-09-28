@@ -825,7 +825,7 @@
           <div class="finance-main-icon">📈</div>
           <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">Market Watch • My funds • ETF • Stock</div></div>
         </div>
-        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
+        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financePortfolioQaBtn">🔍 QA พอร์ต 3 รายการ</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
       </div>
       <div class="finance-seg finance-main-tabs" id="financeSeg">
         <button type="button" class="active" data-tab="fund">My funds</button>
@@ -1180,6 +1180,14 @@
     <div id="financePurchasePnlTestBody" class="finance-detail-section"></div>
   </div>
 </div>
+<div class="fund-detail-overlay finance-modal" id="financePortfolioQaOverlay" hidden>
+  <div class="fund-detail-sheet">
+    <button class="fund-detail-close" id="financePortfolioQaClose" type="button">×</button>
+    <div class="fund-detail-title">QA พอร์ต 3 รายการ (ไม่บันทึกข้อมูลจริง)</div>
+    <div class="fund-detail-symbol">จำลองรายการซื้อ 3 งวดจาก NAV History จริง แล้วตรวจการรวมหน่วย มูลค่า และ P/L แบบ Portfolio</div>
+    <div id="financePortfolioQaBody" class="finance-detail-section"></div>
+  </div>
+</div>
 <div class="fund-detail-overlay finance-modal" id="financeDetailOverlay" hidden>
   <div class="fund-detail-sheet">
     <button class="fund-detail-close" id="financeDetailClose">×</button>
@@ -1200,7 +1208,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V60 Purchase NAV P&L QA';
+const APP_BUILD = 'V61 Portfolio 3-Transaction Reconciliation QA';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2831,9 +2839,72 @@ function openFinancePurchasePnlTest(){
 document.getElementById('financeDcaTestBtn')?.addEventListener('click',openFinanceDcaTest);
 document.getElementById('financeDcaTestClose')?.addEventListener('click',()=>{document.getElementById('financeDcaTestOverlay').hidden=true;});
 document.getElementById('financePurchasePnlTestBtn')?.addEventListener('click',openFinancePurchasePnlTest);
+document.getElementById('financePortfolioQaBtn')?.addEventListener('click',openFinancePortfolioQa);
+document.getElementById('financePortfolioQaClose')?.addEventListener('click',()=>{document.getElementById('financePortfolioQaOverlay').hidden=true;});
+document.getElementById('financePortfolioQaOverlay')?.addEventListener('click',e=>{if(e.target.id==='financePortfolioQaOverlay')e.currentTarget.hidden=true;});
 document.getElementById('financePurchasePnlTestClose')?.addEventListener('click',()=>{document.getElementById('financePurchasePnlTestOverlay').hidden=true;});
 document.getElementById('financePurchasePnlTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financePurchasePnlTestOverlay')e.currentTarget.hidden=true;});
 document.getElementById('financeDcaTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financeDcaTestOverlay')e.currentTarget.hidden=true;});
+function openFinancePortfolioQa(){
+ const list=financeMyFundsList();
+ const candidates=list.map(x=>{
+   const code=canonicalFundCode(x.ticker);
+   const raw=(FUND_NAV_HISTORY_BY_CODE[code]||[]).filter(v=>v?.date&&Number(v.nav)>0);
+   const byDate=new Map();
+   raw.forEach(v=>{
+     const key=String(v.date).slice(0,10);
+     const prev=byDate.get(key);
+     if(!prev || String(v.date)>=String(prev.date)) byDate.set(key,{...v,date:key,nav:Number(v.nav)});
+   });
+   const arr=[...byDate.values()].filter(v=>Number(v.nav)>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+   return {item:x,code,arr};
+ }).sort((a,b)=>{
+   const ap=a.code==='SCBNK225E'?1:0,bp=b.code==='SCBNK225E'?1:0;
+   if(ap!==bp)return bp-ap;
+   return b.arr.length-a.arr.length;
+ });
+ const body=document.getElementById('financePortfolioQaBody');
+ const overlay=document.getElementById('financePortfolioQaOverlay');
+ if(!body||!overlay)return;
+ const chosen=candidates.find(x=>x.arr.length>=3);
+ if(!chosen){
+   const best=candidates[0],available=best?.arr?.length||0;
+   body.innerHTML=`<div class="chart-empty">ยังทำ QA พอร์ต 3 รายการไม่ได้</div><div class="finance-detail-note">ต้องมี NAV History อย่างน้อย 3 วันที่แตกต่างกันในกองทุนเดียวกัน${best?`<br>กองทุนที่พบข้อมูลมากที่สุด: <b>${esc(best.code)}</b> (${available} วัน)`:''}<br><br>ระบบจะไม่สร้าง transaction จริง และจะไม่เดา NAV ที่ไม่มีข้อมูล</div>`;
+   overlay.hidden=false;return;
+ }
+ const code=chosen.code, arr=chosen.arr, latest=Number(FUND_NAV[code]?.nav)||Number(arr.at(-1)?.nav)||0;
+ if(!(latest>0)){
+   body.innerHTML='<div class="chart-empty">ยังไม่มี NAV ปัจจุบันสำหรับกองทุนนี้</div>';
+   overlay.hidden=false;return;
+ }
+ const selected=arr.slice(-3);
+ const amounts=[1000,2000,3000];
+ let invested=0,units=0,rows='';
+ const txs=[];
+ selected.forEach((x,i)=>{
+   const amount=amounts[i], purchaseNav=Number(x.nav), u=amount/purchaseNav;
+   invested+=amount; units+=u;
+   txs.push({date:x.date,amount,units:u,purchaseNav});
+   rows+=`<tr><td>${String(x.date).split('-').reverse().join('/')}</td><td>${fmtBaht(amount)}</td><td>${purchaseNav.toFixed(4)}</td><td>${fmtUnits(u)}</td></tr>`;
+ });
+ const value=units*latest,pnl=value-invested,pct=invested?(pnl/invested*100):0;
+ // Independent reconciliation: reproduce the same arithmetic used by financeFundPortfolio
+ // without mutating DATA or writing anything to Sheets.
+ const reconUnits=txs.reduce((sum,t)=>sum+Number(t.units||0),0);
+ const reconValue=reconUnits*latest;
+ const reconPnl=reconValue-invested;
+ const unitsOk=Math.abs(reconUnits-units)<1e-10;
+ const valueOk=Math.abs(reconValue-value)<0.01;
+ const pnlOk=Math.abs(reconPnl-pnl)<0.01;
+ const pass=unitsOk&&valueOk&&pnlOk;
+ const status=pass?'✅ ผ่าน':'⚠️ ตรวจซ้ำ';
+ body.innerHTML=`<div class="finance-detail-note"><b>${esc(code)}</b> • NAV ปัจจุบัน ${latest.toFixed(4)} • จำลอง 3 transaction จาก NAV History จริง • ผลนี้ไม่แก้ DATA, Investments หรือ Google Sheets</div>
+ <table class="finance-dca-test-table"><thead><tr><th>วันที่</th><th>เงินซื้อ</th><th>NAV ซื้อ</th><th>หน่วย</th></tr></thead><tbody>${rows}</tbody></table>
+ <div class="finance-dca-test-total"><b>เงินลงทุนรวม:</b> ${fmtBaht(invested)}<br><b>หน่วยรวม:</b> ${fmtUnits(units)}<br><b>มูลค่าปัจจุบัน:</b> ${fmtBaht(value)}<br><b>กำไร/ขาดทุน:</b> ${fmtSignedBaht(pnl)} (${fmtSignedPct(pct)})</div>
+ <div class="finance-detail-note"><b>Reconciliation ${status}</b><br>หน่วย: ${unitsOk?'ตรงกัน':'ไม่ตรงกัน'} • มูลค่า: ${valueOk?'ตรงกัน':'ไม่ตรงกัน'} • P/L: ${pnlOk?'ตรงกัน':'ไม่ตรงกัน'}<br>สูตร: หน่วยรวม × NAV ปัจจุบัน = มูลค่าปัจจุบัน • มูลค่าปัจจุบัน − เงินลงทุน = P/L</div>
+ <div class="finance-dca-test-note">ใช้วันที่ ${selected.map(x=>x.date).join(', ')} จาก FundNAV_History จริง และจะไม่บันทึก transaction จริง</div>`;
+ overlay.hidden=false;
+}
 function setFinanceTab(tab){
  financeTab=tab;localStorage.setItem('finance_tab',financeTab);
  document.querySelectorAll('#financeSeg button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
