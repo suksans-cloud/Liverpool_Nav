@@ -1,5 +1,5 @@
 /**
- * My Family Funds — NAV Auto Updater V41
+ * My Family Funds — NAV Auto Updater V49
  *
  * Google Sheets structure:
  *   FundMaster       = current/latest NAV used by My Funds
@@ -234,8 +234,34 @@ function onOpen(){
     .addItem('⚙️ ตั้ง Auto Update ทุกวัน','setupNAVAutoUpdate')
     .addSeparator()
     .addItem('📊 เปิด NAV History','openNAVHistory_')
+    .addItem('📝 บันทึก NAV ปัจจุบันลง History','recordCurrentNAVToHistory')
     .addItem('🧾 เปิด NAV Update Log','openNAVLog_')
     .addToUi();
+}
+
+
+function recordCurrentNAVToHistory_(){
+  const ctx=collectFundMasterRows_();
+  const historySh=ensureNavHistorySheet_();
+  const now=new Date(); const tz=Session.getScriptTimeZone()||'Asia/Bangkok';
+  const dateKey=Utilities.formatDate(now,tz,'yyyy-MM-dd');
+  const updatedAt=Utilities.formatDate(now,tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
+  const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
+  const keys=new Set(existing.map(r=>String(r[0]).slice(0,10)+'|'+String(r[1])));
+  const rows=[];
+  ctx.rows.forEach(item=>{
+    const nav=Number(item.oldNav); if(!(nav>0))return;
+    const key=dateKey+'|'+item.code; if(keys.has(key))return;
+    rows.push([dateKey,item.code,nav,'','',String(ctx.values[item.row-1]?.[7]||'Manual FundMaster snapshot'),updatedAt,String(ctx.values[item.row-1]?.[6]||dateKey)]);
+  });
+  if(rows.length)historySh.getRange(historySh.getLastRow()+1,1,rows.length,8).setValues(rows);
+  return {history:rows.length,date:dateKey};
+}
+function recordCurrentNAVToHistory(){
+  const r=recordCurrentNAVToHistory_();
+  try{SpreadsheetApp.getUi().alert('NAV History','บันทึก NAV ปัจจุบันลง History แล้ว '+r.history+' รายการ
+วันที่ '+r.date,SpreadsheetApp.getUi().ButtonSet.OK);}catch(e){}
+  return r;
 }
 
 function openNAVHistory_(){ const sh=ensureNavHistorySheet_(); SpreadsheetApp.setActiveSheet(sh); }
