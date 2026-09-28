@@ -827,7 +827,7 @@
           <div class="finance-main-icon">📈</div>
           <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">Market Watch • My funds • ETF • Stock</div></div>
         </div>
-        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financePortfolioQaBtn">🔍 QA พอร์ต 3 รายการ</button><button class="tool-btn" id="financePortfolioOverviewBtn">📊 ภาพรวมพอร์ต</button><button class="tool-btn" id="financeRealTxBtn">🧾 รายการซื้อจริง</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
+        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financePortfolioQaBtn">🔍 QA พอร์ต 3 รายการ</button><button class="tool-btn" id="financePortfolioOverviewBtn">📊 ภาพรวมพอร์ต</button><button class="tool-btn" id="financePortfolioHistoryBtn">📈 ประวัติพอร์ต</button><button class="tool-btn" id="financeRealTxBtn">🧾 รายการซื้อจริง</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
       </div>
       <div class="finance-seg finance-main-tabs" id="financeSeg">
         <button type="button" class="active" data-tab="fund">My funds</button>
@@ -3142,6 +3142,17 @@ async function refreshFinanceData(){
   }catch(e){ console.warn('Finance refresh',e); showToast('อัปเดต Finance ไม่สำเร็จ'); }
 }
 document.getElementById('financePortfolioOverviewBtn')?.addEventListener('click',openFinancePortfolioOverview);
+document.getElementById('financePortfolioHistoryBtn')?.addEventListener('click',()=>{
+  if(financeTab!=='fund'){
+    financeTab='fund';
+    document.querySelectorAll('#financeSeg button').forEach(b=>b.classList.toggle('active',b.dataset.tab==='fund'));
+    renderFinanceCards();
+  } else {
+    renderFinancePortfolioHistory();
+  }
+  const box=document.getElementById('financePortfolioHistory');
+  if(box){ box.hidden=false; box.scrollIntoView({behavior:'smooth',block:'start'}); }
+});
 document.getElementById('financePortfolioOverviewClose')?.addEventListener('click',closeFinancePortfolioOverview);
 document.getElementById('financeRealTxBtn')?.addEventListener('click',openFinanceRealTransactions);
 document.getElementById('financeRealTxClose')?.addEventListener('click',()=>{document.getElementById('financeRealTxOverlay').hidden=true;});
