@@ -2663,6 +2663,8 @@ document.addEventListener('click',e=>{
  if(bar && !bar.contains(e.target))closeFinanceSortMenu();
 });
 function financePortfolioHistoryData(){
+  // Build a daily portfolio valuation from real transactions + real NAV history.
+  // Only transactions with actual units are included; PlanMaster is never used.
   const tx=[];
   (DATA?.funds||[]).forEach(f=>{
     const code=canonicalFundCode(f.name);
@@ -2674,12 +2676,30 @@ function financePortfolioHistoryData(){
   });
   const hist={};
   Object.entries(FUND_NAV_HISTORY_BY_CODE||{}).forEach(([code,arr])=>{
-    hist[code]=(arr||[]).filter(x=>x?.date&&Number(x.nav)>0).slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const byDate=new Map();
+    (arr||[]).filter(x=>x?.date&&Number(x.nav)>0).forEach(x=>{
+      const date=String(x.date).slice(0,10);
+      const prev=byDate.get(date);
+      if(!prev || String(x.updatedAt||'')>=String(prev.updatedAt||'')) byDate.set(date,{...x,date,nav:Number(x.nav)});
+    });
+    hist[code]=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
   });
-  const dates=new Set(Object.values(hist).flat().map(x=>x.date));
+  if(!tx.length)return {points:[],partial:false};
+  tx.sort((a,b)=>a.date.localeCompare(b.date));
+  const firstDate=tx[0].date;
+  const histDates=Object.values(hist).flat().map(x=>x.date).filter(d=>d>=firstDate);
+  const lastDate=histDates.length?histDates.sort().at(-1):tx.at(-1).date;
+  const dates=new Set();
+  // Use every calendar day so a real portfolio history does not collapse to only
+  // transaction dates. NAV is carried forward only when a real prior NAV exists.
+  const cur=new Date(firstDate+'T00:00:00Z');
+  const end=new Date(lastDate+'T00:00:00Z');
+  while(cur<=end){
+    dates.add(cur.toISOString().slice(0,10));
+    cur.setUTCDate(cur.getUTCDate()+1);
+  }
   tx.forEach(t=>dates.add(t.date));
   const sorted=[...dates].sort();
-  if(!sorted.length || !tx.length)return {points:[],partial:false};
   const latestNav=(code,date)=>{
     const arr=hist[code]||[];
     let hit=null;
@@ -2688,14 +2708,17 @@ function financePortfolioHistoryData(){
   };
   const points=[]; let partial=false;
   sorted.forEach(date=>{
-    let invested=0,value=0,hasValue=false;
+    let invested=0,value=0,hasValue=false,missingValue=false;
     tx.forEach(t=>{
       if(t.date>date)return;
       invested+=t.amount;
       const nav=latestNav(t.code,date);
-      if(nav!=null){value+=t.units*nav;hasValue=true;} else partial=true;
+      if(nav!=null){value+=t.units*nav;hasValue=true;} else missingValue=true;
     });
-    if(invested>0)points.push({date,invested,value:hasValue?value:null});
+    if(invested>0){
+      if(missingValue) partial=true;
+      points.push({date,invested,value:hasValue&&!missingValue?value:null});
+    }
   });
   return {points,partial};
 }
@@ -2712,20 +2735,22 @@ function renderFinancePortfolioHistory(){
   const {points,partial}=financePortfolioHistoryData();
   if(points.length<1){box.hidden=false;chart.innerHTML='<div class="chart-empty">ยังไม่มีข้อมูลเพียงพอสำหรับกราฟ<br>ต้องมีรายการซื้อที่มีจำนวนหน่วยจริง และมี NAV ใน FundNAV_History</div>';note.textContent='ใช้เฉพาะธุรกรรมที่มีจำนวนหน่วยจริง';return;}
   box.hidden=false;
-  note.textContent=partial?'มูลค่าคำนวณจาก NAV ที่มีในประวัติ • บางกองทุนอาจยังไม่มี NAV ย้อนหลังครบ':'มูลค่าคำนวณจากจำนวนหน่วยจริง × NAV ล่าสุดที่มี ณ วันนั้น';
+  note.textContent=partial?'รายวันจากธุรกรรมจริง + NAV History • บางวัน/บางกองทุนยังไม่มี NAV จึงไม่แสดงมูลค่า':'รายวันจากธุรกรรมจริง × NAV ที่มีจริง ณ วันนั้น • เงินลงทุนสะสมแยกจากมูลค่าพอร์ต';
   const w=640,h=185,p={l:38,r:10,t:10,b:28};
-  const vals=points.flatMap(x=>[x.invested, x.value==null?x.invested:x.value]);
+  const vals=points.flatMap(x=>[x.invested, x.value]).filter(v=>Number.isFinite(Number(v))).map(Number);
   let min=Math.min(...vals),max=Math.max(...vals); if(!isFinite(min)||!isFinite(max)){chart.innerHTML='<div class="chart-empty">ยังไม่มีข้อมูลที่คำนวณได้</div>';return;}
   if(max===min){const pad=Math.max(100,min*0.05);min=Math.max(0,min-pad);max=max+pad;}else{const pad=(max-min)*0.12;min=Math.max(0,min-pad);max+=pad;}
   const x=i=>p.l+(points.length===1?(w-p.l-p.r)/2:(i/(points.length-1))*(w-p.l-p.r));
   const y=v=>h-p.b-((v-min)/(max-min))*(h-p.t-p.b);
   const lineFor=arr=>arr.map((v,i)=>`${i?'L':'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
   const investedLine=lineFor(points.map(q=>q.invested));
-  const valuePoints=points.map(q=>q.value==null?q.invested:q.value), valueLine=lineFor(valuePoints);
+  const valuePoints=points.map(q=>q.value);
+  const valuePairs=points.map((q,i)=>q.value==null?null:[i,q.value]).filter(Boolean);
+  const valueLine=valuePairs.length?valuePairs.map((pair,j)=>`${j?'L':'M'} ${x(pair[0]).toFixed(1)} ${y(pair[1]).toFixed(1)}`).join(' '):'';
   const grid=[0,1,2,3].map(i=>{const yy=p.t+i*(h-p.t-p.b)/3;const v=max-(max-min)*i/3;return `<line class="chart-grid" x1="${p.l}" x2="${w-p.r}" y1="${yy}" y2="${yy}"/><text x="${p.l-5}" y="${yy+3}" text-anchor="end">฿${shortBaht(v)}</text>`;}).join('');
   const labelIdx=points.length<=4?points.map((_,i)=>i):[0,Math.floor((points.length-1)/2),points.length-1];
   const labels=[...new Set(labelIdx)].map(i=>{const d=points[i].date;const [yy,mm,dd]=d.split('-');return `<text x="${x(i)}" y="${h-8}" text-anchor="middle">${dd}/${mm}/${String(yy).slice(2)}</text>`;}).join('');
-  const dots=valuePoints.map((v,i)=>`<circle class="chart-value-dot" cx="${x(i)}" cy="${y(v)}" r="3"/>`).join('');
+  const dots=valuePairs.map(pair=>`<circle class="chart-value-dot" cx="${x(pair[0])}" cy="${y(pair[1])}" r="3"/>`).join('');
   chart.innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="กราฟประวัติพอร์ต">${grid}<line class="chart-axis" x1="${p.l}" x2="${p.l}" y1="${p.t}" y2="${h-p.b}"/><line class="chart-axis" x1="${p.l}" x2="${w-p.r}" y1="${h-p.b}" y2="${h-p.b}"/><path class="chart-invested-line" d="${investedLine}"/><path class="chart-value-line" d="${valueLine}"/>${dots}${labels}</svg>`;
 }
 
