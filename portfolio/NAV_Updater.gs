@@ -1,5 +1,5 @@
 /**
- * My Family Funds — NAV Auto Updater V49
+ * My Family Funds — NAV Auto Updater V57
  *
  * Google Sheets structure:
  *   FundMaster       = current/latest NAV used by My Funds
@@ -19,6 +19,82 @@ const NAV_TAB = 'FundMaster';
 const NAV_HISTORY_TAB = 'FundNAV_History';
 const NAV_UPDATE_HOUR = 19; // Asia/Bangkok
 const NAV_STATUS_TAB = 'NAV_Update_Log';
+
+const NAV_SOURCE_URL_SCBAM_HISTORY = 'https://www.scbam.com/en/fund/nav-historical/';
+
+function parseScbamHistoricalNav_(html, wanted){
+  const text=cleanHtmlText_(html);
+  const updates={};
+  wanted.forEach(code=>{
+    const escaped=String(code).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const codeRe=new RegExp('(?:^|[| ])'+escaped+'(?:[| ]|$)','i');
+    const hit=codeRe.exec(text);
+    if(!hit)return;
+    // Find the group header containing this fund code, then inspect only the
+    // dated rows until the next group header. The historical page presents
+    // several funds together, with one NAV block per date.
+    const before=text.slice(Math.max(0,hit.index-220),hit.index);
+    const headerRel=before.lastIndexOf('Date');
+    if(headerRel<0)return;
+    const groupStart=Math.max(0,hit.index-220)+headerRel;
+    const afterGroup=text.slice(groupStart);
+    // Find the next group header by looking for a Date token whose next
+    // character is a fund-code letter, not a numeric date. This avoids
+    // confusing `Date 28/09/2026` with the next header.
+    let nextHeader=-1, scan=5;
+    while((scan=afterGroup.indexOf('Date ',scan))>=0){
+      const ch=afterGroup.charAt(scan+5);
+      if(ch && !/[0-9]/.test(ch)){ nextHeader=scan; break; }
+      scan+=5;
+    }
+    const group=nextHeader>=0?afterGroup.slice(0,nextHeader):afterGroup;
+    const rows=[];
+    const dateRe=/Date\s+(\d{1,2}\/\d{1,2}\/\d{4})/gi;
+    let dm;
+    while((dm=dateRe.exec(group))){
+      const dateText=dm[1];
+      const block=group.slice(dm.index, dateRe.lastIndex+1200);
+      const next=block.slice(10).search(/Date\s+\d{1,2}\/\d{1,2}\/\d{4}/i);
+      const dated=next>=0?block.slice(0,next+10):block;
+      const codePos=dated.search(new RegExp('(?:^|[| ])'+escaped+'(?:[| ]|$)','i'));
+      if(codePos<0)continue;
+      const tail=dated.slice(codePos+String(code).length,codePos+String(code).length+160);
+      const nm=tail.match(/\b(\d{1,4}\.\d{4})\b/);
+      if(!nm)continue;
+      const nav=Number(nm[1]);
+      if(nav>0)rows.push({dateText,dateKey:normalizeNavDate_(dateText),nav});
+    }
+    if(rows.length)updates[code]=rows;
+  });
+  return updates;
+}
+
+function backfillScbamNavHistory(){
+  const ctx=collectFundMasterRows_();
+  const wanted=ctx.rows.filter(x=>x.manager==='SCBAM').map(x=>x.code);
+  if(!wanted.length)return {history:0,dates:0,updatedFunds:0};
+  const html=fetchText_(NAV_SOURCE_URL_SCBAM_HISTORY);
+  const parsed=parseScbamHistoricalNav_(html,wanted);
+  const historySh=ensureNavHistorySheet_();
+  const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
+  const keys=new Set(existing.map(r=>String(r[0]).slice(0,10)+'|'+String(r[1])));
+  const tz=Session.getScriptTimeZone()||'Asia/Bangkok';
+  const updatedAt=Utilities.formatDate(new Date(),tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
+  const rows=[]; let funds=0; const dateSet=new Set();
+  wanted.forEach(code=>{
+    const arr=(parsed[code]||[]).sort((a,b)=>String(a.dateKey).localeCompare(String(b.dateKey))).slice(-10);
+    if(arr.length)funds++;
+    arr.forEach(u=>{
+      const key=u.dateKey+'|'+code;
+      if(keys.has(key))return;
+      rows.push([u.dateKey,code,u.nav,'','','SCBAM Official NAV historical',updatedAt,u.dateText]);
+      keys.add(key); dateSet.add(u.dateKey);
+    });
+  });
+  if(rows.length)historySh.getRange(historySh.getLastRow()+1,1,rows.length,8).setValues(rows);
+  return {history:rows.length,dates:dateSet.size,updatedFunds:funds};
+}
+
 
 function ensureNavStatusSheet_(){
   const ss=SpreadsheetApp.getActive();
@@ -174,6 +250,10 @@ function updateAllNAVs(){
     if(wanted.length){
       const u=parseScbamNavFeed_(fetchText_(NAV_SOURCE_URL_SCBAM),wanted);
       const r=writeNavUpdates_(ctx,u,'SCBAM Official NAV feed'); totalUpdated+=r.updated;totalHistory+=r.history;
+      // Also backfill recent official SCBAM history so DCA/return calculations
+      // do not have to wait several days after a new fund is added.
+      try{ const b=backfillScbamNavHistory(); totalHistory+=b.history||0; }
+      catch(e){ Logger.log('SCBAM historical backfill failed: '+e); }
     }
   }catch(e){Logger.log('SCBAM update failed: '+e);}
 
@@ -235,6 +315,7 @@ function onOpen(){
     .addSeparator()
     .addItem('📊 เปิด NAV History','openNAVHistory_')
     .addItem('📝 บันทึก NAV ปัจจุบันลง History','recordCurrentNAVToHistory')
+    .addItem('📥 เติม NAV History ย้อนหลัง (SCBAM)','backfillScbamNavHistory')
     .addItem('🧾 เปิด NAV Update Log','openNAVLog_')
     .addToUi();
 }
@@ -259,8 +340,7 @@ function recordCurrentNAVToHistory_(){
 }
 function recordCurrentNAVToHistory(){
   const r=recordCurrentNAVToHistory_();
-  try{SpreadsheetApp.getUi().alert('NAV History','บันทึก NAV ปัจจุบันลง History แล้ว '+r.history+' รายการ
-วันที่ '+r.date,SpreadsheetApp.getUi().ButtonSet.OK);}catch(e){}
+  try{SpreadsheetApp.getUi().alert('NAV History','บันทึก NAV ปัจจุบันลง History แล้ว '+r.history+' รายการ\nวันที่ '+r.date,SpreadsheetApp.getUi().ButtonSet.OK);}catch(e){}
   return r;
 }
 
