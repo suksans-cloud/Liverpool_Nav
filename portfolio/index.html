@@ -827,7 +827,7 @@
           <div class="finance-main-icon">📈</div>
           <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">Market Watch • My funds • ETF • Stock</div></div>
         </div>
-        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financePortfolioQaBtn">🔍 QA พอร์ต 3 รายการ</button><button class="tool-btn" id="financePortfolioOverviewBtn">📊 ภาพรวมพอร์ต</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
+        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financePortfolioQaBtn">🔍 QA พอร์ต 3 รายการ</button><button class="tool-btn" id="financePortfolioOverviewBtn">📊 ภาพรวมพอร์ต</button><button class="tool-btn" id="financeRealTxBtn">🧾 รายการซื้อจริง</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
       </div>
       <div class="finance-seg finance-main-tabs" id="financeSeg">
         <button type="button" class="active" data-tab="fund">My funds</button>
@@ -1189,6 +1189,14 @@
     <div class="fund-detail-title">ทดสอบ P/L จาก NAV วันที่ซื้อ (ไม่บันทึกข้อมูลจริง)</div>
     <div class="fund-detail-symbol">ซื้อจำลอง 1 รายการด้วย NAV ย้อนหลัง แล้วตีมูลค่าด้วย NAV ปัจจุบัน</div>
     <div id="financePurchasePnlTestBody" class="finance-detail-section"></div>
+  </div>
+</div>
+<div class="fund-detail-overlay finance-modal" id="financeRealTxOverlay" hidden>
+  <div class="fund-detail-sheet">
+    <button class="fund-detail-close" id="financeRealTxClose" type="button">×</button>
+    <div class="fund-detail-title">รายการซื้อจริงใน Portfolio</div>
+    <div class="fund-detail-symbol">อ่านจาก Investments ที่มีจำนวนหน่วยจริง • ไม่สร้างหรือแก้รายการ</div>
+    <div id="financeRealTxBody" class="finance-detail-section"></div>
   </div>
 </div>
 <div class="fund-detail-overlay finance-modal" id="financePortfolioQaOverlay" hidden>
@@ -2884,6 +2892,44 @@ document.getElementById('financePortfolioQaOverlay')?.addEventListener('click',e
 document.getElementById('financePurchasePnlTestClose')?.addEventListener('click',()=>{document.getElementById('financePurchasePnlTestOverlay').hidden=true;});
 document.getElementById('financePurchasePnlTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financePurchasePnlTestOverlay')e.currentTarget.hidden=true;});
 document.getElementById('financeDcaTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financeDcaTestOverlay')e.currentTarget.hidden=true;});
+function openFinanceRealTransactions(){
+ const overlay=document.getElementById('financeRealTxOverlay'),body=document.getElementById('financeRealTxBody');
+ if(!overlay||!body)return;
+ const rows=[];
+ (DATA?.funds||[]).forEach(f=>{
+   const code=canonicalFundCode(f.name), owner=f.owner||'';
+   (Array.isArray(f.transactions)?f.transactions:[]).forEach(t=>{
+     const amount=Number(t.amount)||0, units=Number(t.units)||0;
+     if(amount<=0)return;
+     const date=parseFundNavDateKey(t.date)||String(t.date||'').slice(0,10);
+     const purchaseNav=Number(t.purchaseNav)||Number(t.nav)||0;
+     const latest=Number(FUND_NAV[code]?.nav)||0;
+     const value=units>0&&latest>0?units*latest:null;
+     const pnl=value==null?null:value-amount;
+     const pct=value==null||amount<=0?null:pnl/amount*100;
+     rows.push({date,code,owner,amount,units,purchaseNav,latest,value,pnl,pct});
+   });
+ });
+ rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+ if(!rows.length){
+   body.innerHTML='<div class="chart-empty">ยังไม่มีรายการซื้อจริงที่มีข้อมูล transaction</div><div class="finance-detail-note">รายการวางแผนใน PlanMaster ไม่ถือเป็น transaction จริง และจะไม่ถูกแปลงเป็นหน่วยโดยอัตโนมัติ</div>';
+   overlay.hidden=false;return;
+ }
+ const known=rows.filter(r=>r.units>0&&r.latest>0);
+ const invested=known.reduce((s,r)=>s+r.amount,0), units=known.reduce((s,r)=>s+r.units,0), value=known.reduce((s,r)=>s+(r.value||0),0), pnl=value-invested;
+ const pct=invested>0?pnl/invested*100:null;
+ const tr=rows.map(r=>{
+   const d=r.date?String(r.date).split('-').reverse().join('/'):'—';
+   const st=r.units>0&&r.latest>0?'พร้อมคำนวณ':'รอหน่วย/NAV';
+   return `<tr><td><b>${esc(d)}</b><div class="finance-overview-status">${esc(r.code)} • ${esc(r.owner||'—')}</div></td><td>${esc(fmtBaht(r.amount))}</td><td>${r.purchaseNav>0?r.purchaseNav.toFixed(4):'—'}</td><td>${r.units>0?esc(fmtUnits(r.units)):'—'}</td><td>${r.latest>0?r.latest.toFixed(4):'—'}</td><td>${r.value!=null?esc(fmtBaht(r.value)):'รอข้อมูล'}</td><td>${r.pnl!=null?esc(fmtSignedBaht(r.pnl)):'รอข้อมูล'}</td><td>${r.pct!=null?esc(fmtSignedPct(r.pct)):st}</td></tr>`;
+ }).join('');
+ body.innerHTML=`<div class="finance-portfolio-summary" style="margin-top:8px">${[
+   ['เงินลงทุนที่คำนวณได้',fmtBaht(invested),''],['หน่วยรวม',fmtUnits(units),''],['มูลค่าปัจจุบัน',fmtBaht(value),''],['P/L',fmtSignedBaht(pnl),pnl>0?'positive':pnl<0?'negative':''],['ผลตอบแทน',pct==null?'รอข้อมูล':fmtSignedPct(pct),pct==null?'':pct>0?'positive':pct<0?'negative':'']
+ ].map(x=>`<div class="finance-summary-card ${x[2]}" style="padding:9px"><div class="k">${x[0]}</div><div class="v">${esc(x[1])}</div></div>`).join('')}</div>
+ <div style="overflow:auto"><table class="finance-overview-table"><thead><tr><th>วันที่ / กองทุน</th><th>เงินซื้อ</th><th>NAV ซื้อ</th><th>หน่วย</th><th>NAV ล่าสุด</th><th>มูลค่า</th><th>P/L</th><th>ผลตอบแทน/สถานะ</th></tr></thead><tbody>${tr}</tbody></table></div>
+ <div class="finance-overview-note">รายการนี้อ่านจาก transaction จริงเท่านั้น • PlanMaster/เงินลงทุนตามแผนไม่ถูกนับเป็นเงินลงทุนจริง • มูลค่า = หน่วย × NAV ล่าสุด • P/L = มูลค่า − เงินซื้อ</div>`;
+ overlay.hidden=false;
+}
 function openFinancePortfolioQa(){
  const list=financeMyFundsList();
  const candidates=list.map(x=>{
@@ -3072,6 +3118,9 @@ async function refreshFinanceData(){
 }
 document.getElementById('financePortfolioOverviewBtn')?.addEventListener('click',openFinancePortfolioOverview);
 document.getElementById('financePortfolioOverviewClose')?.addEventListener('click',closeFinancePortfolioOverview);
+document.getElementById('financeRealTxBtn')?.addEventListener('click',openFinanceRealTransactions);
+document.getElementById('financeRealTxClose')?.addEventListener('click',()=>{document.getElementById('financeRealTxOverlay').hidden=true;});
+document.getElementById('financeRealTxOverlay')?.addEventListener('click',e=>{if(e.target.id==='financeRealTxOverlay')e.currentTarget.hidden=true;});
 document.getElementById('financeRefreshBtn')?.addEventListener('click',refreshFinanceData);
 document.getElementById('marketManagerBtn')?.addEventListener('click',()=>{setManagerTab(financeTab);document.getElementById('marketManagerModal').hidden=false;});
 document.getElementById('marketManagerClose')?.addEventListener('click',()=>document.getElementById('marketManagerModal').hidden=true);
