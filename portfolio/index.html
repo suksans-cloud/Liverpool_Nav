@@ -1157,6 +1157,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
+const APP_BUILD = 'V47 Portfolio Connected';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2333,14 +2334,30 @@ function financeListForTab(tab){
 function financeFundPortfolio(code){
  const canonical=canonicalFundCode(code);
  const records=DATA.funds.filter(f=>canonicalFundCode(f.name)===canonical);
- const invested=records.reduce((sum,f)=>sum+(f.transactions||[]).reduce((s,t)=>s+(Number(t.amount)||0),0),0);
+ // เงินลงทุน: ใช้ Investments เป็นแหล่งจริงเมื่อมี transaction history;
+ // ถ้ายังไม่มี transaction ให้ใช้ PlanMaster/planMonths ซึ่งเป็นยอด "เงินลงทุนจริง"
+ // ที่ซิงก์เข้ามาจาก Google Sheets เพื่อไม่ให้ My Funds แสดง ฿0.00 ทั้งที่มีข้อมูลอยู่แล้ว.
+ let invested=0;
+ let usedPlanFallback=false;
+ records.forEach(f=>{
+   const txs=Array.isArray(f.transactions)?f.transactions:[];
+   if(txs.length){
+     invested += txs.reduce((s,t)=>s+(Number(t.amount)||0),0);
+   }else{
+     Object.values(f.years||{}).forEach(yd=>{
+       const months=yd?.planMonths||yd?.months||{};
+       invested += Object.values(months).reduce((s,v)=>s+(Number(v)||0),0);
+     });
+     usedPlanFallback=true;
+   }
+ });
  const units=records.reduce((sum,f)=>sum+(f.transactions||[]).reduce((s,t)=>s+(Number(t.units)||0),0),0);
  const nav=Number(FUND_NAV[canonical]?.nav);
  const hasUnits=units>0 && isFinite(nav) && nav>0;
  const value=hasUnits?units*nav:null;
  const pnl=value==null?null:value-invested;
  const pct=value==null||invested<=0?null:(pnl/invested*100);
- return {invested,units,nav,value,pnl,pct,hasUnits,records};
+ return {invested,units,nav,value,pnl,pct,hasUnits,records,usedPlanFallback};
 }
 function fmtBaht(v){
  if(v==null||!isFinite(Number(v))) return '—';
@@ -2462,7 +2479,9 @@ function openFinanceDetail(ticker){
   ].map(x=>`<div class="finance-detail-kpi portfolio-kpi"><div class="k">${x[0]}</div><div class="v ${String(x[1]).includes('รอข้อมูล')?'muted':''}">${esc(x[1])}</div></div>`).join('');
   pnote.textContent=pf.hasUnits
     ? 'มูลค่าปัจจุบันคำนวณจากจำนวนหน่วยจริง × NAV ล่าสุด'
-    : 'ตอนนี้ฐานข้อมูล Investments มีจำนวนเงินลงทุน แต่ยังไม่มีจำนวนหน่วยจริง จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุนเพื่อไม่ให้ตัวเลขคลาดเคลื่อน';
+    : (pf.usedPlanFallback
+      ? 'เงินลงทุนเชื่อมจาก PlanMaster (เงินลงทุนจริง) แล้ว • ยังไม่มีจำนวนหน่วยจริงในฐานข้อมูล จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน'
+      : 'ฐานข้อมูล Investments มีจำนวนเงินลงทุนแล้ว แต่ยังไม่มีจำนวนหน่วยจริง จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน');
 
   document.getElementById('financeDetailOverlay').hidden=false;
   return;
