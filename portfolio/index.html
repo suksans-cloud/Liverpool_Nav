@@ -1027,6 +1027,17 @@
         <input type="number" id="investAmount" placeholder="100.00" step="0.01" min="0">
       </div>
     </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="investPurchaseNav">NAV วันที่ซื้อ <span style="font-weight:500;color:var(--ink-faint)">(ถ้าทราบ)</span></label>
+        <input type="number" id="investPurchaseNav" placeholder="ระบบจะดึงจาก NAV History ถ้ามี" step="0.0001" min="0">
+      </div>
+      <div class="field">
+        <label for="investUnits">จำนวนหน่วย <span style="font-weight:500;color:var(--ink-faint)">(ถ้าทราบ)</span></label>
+        <input type="number" id="investUnits" placeholder="ระบบคำนวณจาก NAV ได้" step="0.00000001" min="0">
+      </div>
+    </div>
+    <div class="history-help" style="margin:-2px 0 10px">ถ้าไม่กรอก ระบบจะใช้ NAV ของวันลงทุนจาก <b>FundNAV_History</b> เฉพาะเมื่อมีวันที่ตรงกัน; ถ้าไม่มี จะรอข้อมูลแทนการเดา</div>
     <div class="field note-field">
       <label for="investNote">โน้ต / บันทึกรายการ</label>
       <textarea id="investNote" placeholder="เช่น DCA ประจำเดือน, ซื้อเพิ่ม, โบนัส, ปรับพอร์ต..."></textarea>
@@ -1157,7 +1168,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V47 Portfolio Connected';
+const APP_BUILD = 'V48 Real Units & Portfolio';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1223,6 +1234,45 @@ function fundNavInfo(f){
   const base=f.name.replace(/\s*\([^)]*\)\s*$/,'');
   return FUND_NAV[base] || null;
 }
+// Historical NAV loaded from Google Sheets FundNAV_History.
+// Only an exact NAV date is used automatically for transaction unit calculation;
+// otherwise the user can enter the actual purchase NAV manually.
+let FUND_NAV_HISTORY = {};
+function navHistoryKey(code,date){ return canonicalFundCode(code)+'|'+String(date||'').slice(0,10); }
+function setNavHistoryRows(rows){
+  FUND_NAV_HISTORY={};
+  (rows||[]).forEach(r=>{
+    const date=String(r?.[0]||'').slice(0,10), code=canonicalFundCode(r?.[1]||''), nav=Number(r?.[2]);
+    if(!date||!code||!isFinite(nav)||nav<=0)return;
+    FUND_NAV_HISTORY[navHistoryKey(code,date)]={nav,date,source:String(r?.[5]||'')};
+  });
+}
+function historicalNavForTransaction(code,date){
+  const hit=FUND_NAV_HISTORY[navHistoryKey(code,date)];
+  return hit?.nav||null;
+}
+function enrichTransactionUnits(t,fundCode){
+  const code=canonicalFundCode(fundCode||t?.fundCode||'');
+  if(!t||!code)return false;
+  let changed=false;
+  let purchaseNav=Number(t.purchaseNav);
+  if(!(purchaseNav>0)){
+    const h=historicalNavForTransaction(code,t.date);
+    if(h){ t.purchaseNav=h; purchaseNav=h; changed=true; }
+  }
+  if(!(Number(t.units)>0) && purchaseNav>0 && Number(t.amount)>0){
+    t.units=Number(t.amount)/purchaseNav; changed=true;
+  }
+  return changed;
+}
+function enrichAllTransactionUnits(){
+  let changed=false;
+  DATA.funds.forEach(f=>{
+    (f.transactions||[]).forEach(t=>{ if(enrichTransactionUnits(t,f.name)) changed=true; });
+  });
+  return changed;
+}
+
 (function loadWebFundRegistry(){
  try{const saved=JSON.parse(localStorage.getItem('fund_master_web_registry_v1')||'null');if(saved&&typeof saved==='object'){Object.entries(saved).forEach(([k,v])=>{FUND_MASTER[k]={...(FUND_MASTER[k]||{}),...v};});}}catch(e){}
 })();
@@ -1548,15 +1598,18 @@ function rebuildFundMonths(f){
   Object.keys(f.years||{}).forEach(y=>{if(f.years[y])f.years[y].months={};});
   (f.transactions||[]).forEach(t=>{const yd=yearData(f,Number(t.year),true);yd.months[Number(t.month)]=(Number(yd.months[Number(t.month)])||0)+(Number(t.amount)||0);});
 }
-function addTransaction(f,date,amount,note=''){
+function addTransaction(f,date,amount,note='',purchaseNav='',units=''){
   const d=new Date(date+'T00:00:00');
   const tx={id:'tx_'+Math.random().toString(36).slice(2,10),date,year:d.getFullYear(),month:d.getMonth()+1,amount:Number(amount),note:String(note||'').trim()};
+  if(Number(purchaseNav)>0) tx.purchaseNav=Number(purchaseNav);
+  if(Number(units)>0) tx.units=Number(units);
+  enrichTransactionUnits(tx,f.name);
   f.transactions.push(tx);const yd=yearData(f,tx.year,true);yd.months[tx.month]=(Number(yd.months[tx.month])||0)+tx.amount; yd.planMonths=yd.planMonths||{}; yd.planMonths[tx.month]=(Number(yd.planMonths[tx.month])||0)+tx.amount;
 }
 function renderHistory(f){
   const wrap=document.getElementById('detailHistory');if(!wrap)return;
   const rows=transactionForFundYear(f);
-  wrap.innerHTML=rows.length?rows.map(t=>`<div class="history-item"><div><div class="history-date">${new Date(t.date+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}</div><div class="history-note">${MONTHS[Number(t.month)-1]||''}</div>${t.note?`<div class="history-note-text">📝 ${escapeHtml(t.note)}</div>`:'<div class="history-note-empty">ยังไม่มีโน้ต</div>'}</div><div class="history-amt privacy-number">${fmtInt(t.amount)}</div><div class="history-actions"><button title="แก้ไขรายการและโน้ต" data-edit-tx="${t.id}">✎</button><button title="ลบรายการ" data-del-tx="${t.id}">×</button></div></div>`).join(''):'<div class="empty-state" style="padding:18px">ยังไม่มีประวัติการลงทุนของปีนี้</div>';
+  wrap.innerHTML=rows.length?rows.map(t=>`<div class="history-item"><div><div class="history-date">${new Date(t.date+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}</div><div class="history-note">${MONTHS[Number(t.month)-1]||''}</div>${t.note?`<div class="history-note-text">📝 ${escapeHtml(t.note)}</div>`:'<div class="history-note-empty">ยังไม่มีโน้ต</div>'}${Number(t.units)>0?`<div class="history-note-text">หน่วย ${fmtUnits(t.units)} • NAV ซื้อ ${Number(t.purchaseNav)>0?Number(t.purchaseNav).toFixed(4):'—'}</div>`:'<div class="history-note-empty">ยังไม่มีข้อมูลหน่วย</div>'}</div><div class="history-amt privacy-number">${fmtInt(t.amount)}</div><div class="history-actions"><button title="แก้ไขรายการและโน้ต" data-edit-tx="${t.id}">✎</button><button title="ลบรายการ" data-del-tx="${t.id}">×</button></div></div>`).join(''):'<div class="empty-state" style="padding:18px">ยังไม่มีประวัติการลงทุนของปีนี้</div>';
   wrap.querySelectorAll('[data-edit-tx]').forEach(b=>b.onclick=()=>editTransaction(f.id,b.dataset.editTx));
   wrap.querySelectorAll('[data-del-tx]').forEach(b=>b.onclick=()=>deleteTransaction(f.id,b.dataset.delTx));
 }
@@ -2046,6 +2099,8 @@ function openInvestModal(){
   populateInvestFunds();
   document.getElementById('investDate').valueAsDate = new Date();
   document.getElementById('investAmount').value = '';
+  document.getElementById('investPurchaseNav').value = '';
+  document.getElementById('investUnits').value = '';
   document.getElementById('investNote').value = '';
   modalInvest.hidden = false;
 }
@@ -2070,7 +2125,9 @@ document.getElementById('investSave').addEventListener('click', ()=>{
   const monthIdx = date.getMonth()+1;
   selectedYear = year;
   const note = document.getElementById('investNote').value.trim();
-  addTransaction(f,dateVal,amount,note);
+  const purchaseNav = parseFloat(document.getElementById('investPurchaseNav').value);
+  const units = parseFloat(document.getElementById('investUnits').value);
+  addTransaction(f,dateVal,amount,note,purchaseNav,units);
   localStorage.setItem('last_invest_owner',f.owner);
   saveData(DATA);
   modalInvest.hidden = true;
@@ -2334,15 +2391,18 @@ function financeListForTab(tab){
 function financeFundPortfolio(code){
  const canonical=canonicalFundCode(code);
  const records=DATA.funds.filter(f=>canonicalFundCode(f.name)===canonical);
- // เงินลงทุน: ใช้ Investments เป็นแหล่งจริงเมื่อมี transaction history;
- // ถ้ายังไม่มี transaction ให้ใช้ PlanMaster/planMonths ซึ่งเป็นยอด "เงินลงทุนจริง"
- // ที่ซิงก์เข้ามาจาก Google Sheets เพื่อไม่ให้ My Funds แสดง ฿0.00 ทั้งที่มีข้อมูลอยู่แล้ว.
- let invested=0;
- let usedPlanFallback=false;
+ let invested=0, usedPlanFallback=false, totalTransactions=0, pendingTransactions=0;
+ const txRecords=[];
  records.forEach(f=>{
    const txs=Array.isArray(f.transactions)?f.transactions:[];
    if(txs.length){
-     invested += txs.reduce((s,t)=>s+(Number(t.amount)||0),0);
+     txs.forEach(t=>{
+       const amount=Number(t.amount)||0;
+       if(amount<=0)return;
+       invested+=amount; totalTransactions++;
+       if(!(Number(t.units)>0)) enrichTransactionUnits(t,canonical);
+       if(Number(t.units)>0) txRecords.push(t); else pendingTransactions++;
+     });
    }else{
      Object.values(f.years||{}).forEach(yd=>{
        const months=yd?.planMonths||yd?.months||{};
@@ -2351,14 +2411,15 @@ function financeFundPortfolio(code){
      usedPlanFallback=true;
    }
  });
- const units=records.reduce((sum,f)=>sum+(f.transactions||[]).reduce((s,t)=>s+(Number(t.units)||0),0),0);
+ const units=txRecords.reduce((sum,t)=>sum+(Number(t.units)||0),0);
  const nav=Number(FUND_NAV[canonical]?.nav);
- const hasUnits=units>0 && isFinite(nav) && nav>0;
- const value=hasUnits?units*nav:null;
+ const hasCompleteUnits=totalTransactions>0 && pendingTransactions===0 && units>0 && isFinite(nav) && nav>0;
+ const value=hasCompleteUnits?units*nav:null;
  const pnl=value==null?null:value-invested;
  const pct=value==null||invested<=0?null:(pnl/invested*100);
- return {invested,units,nav,value,pnl,pct,hasUnits,records,usedPlanFallback};
+ return {invested,units,nav,value,pnl,pct,hasUnits:hasCompleteUnits,records,usedPlanFallback,totalTransactions,pendingTransactions};
 }
+
 function fmtBaht(v){
  if(v==null||!isFinite(Number(v))) return '—';
  return '฿'+Number(v).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2478,10 +2539,12 @@ function openFinanceDetail(ticker){
     ['ผู้ถือ',owner||'—']
   ].map(x=>`<div class="finance-detail-kpi portfolio-kpi"><div class="k">${x[0]}</div><div class="v ${String(x[1]).includes('รอข้อมูล')?'muted':''}">${esc(x[1])}</div></div>`).join('');
   pnote.textContent=pf.hasUnits
-    ? 'มูลค่าปัจจุบันคำนวณจากจำนวนหน่วยจริง × NAV ล่าสุด'
-    : (pf.usedPlanFallback
-      ? 'เงินลงทุนเชื่อมจาก PlanMaster (เงินลงทุนจริง) แล้ว • ยังไม่มีจำนวนหน่วยจริงในฐานข้อมูล จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน'
-      : 'ฐานข้อมูล Investments มีจำนวนเงินลงทุนแล้ว แต่ยังไม่มีจำนวนหน่วยจริง จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน');
+    ? 'มูลค่าปัจจุบันคำนวณจากจำนวนหน่วยจริงของรายการซื้อ × NAV ล่าสุด'
+    : (pf.totalTransactions>0
+      ? `มีรายการลงทุน ${pf.totalTransactions} รายการ • ขาดข้อมูลหน่วย ${pf.pendingTransactions} รายการ จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน`
+      : (pf.usedPlanFallback
+        ? 'เงินลงทุนเชื่อมจาก PlanMaster (เงินลงทุนจริง) แล้ว • ยังไม่มีประวัติซื้อพร้อมจำนวนหน่วย จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน'
+        : 'ฐานข้อมูล Investments ยังไม่มีรายการซื้อพร้อมจำนวนหน่วย จึงยังไม่คำนวณมูลค่าพอร์ต/กำไรขาดทุน'));
 
   document.getElementById('financeDetailOverlay').hidden=false;
   return;
@@ -2604,7 +2667,7 @@ function sheetRows(){
     // Q written here is always the sum of the same monthly values (E:P) written on this row,
     // so the sheet can never end up with Q != sum(E:P).
     const actual=monthVals.reduce((a,b)=>a+b,0);const target=Number(yd.target||f.target)||0;const pct=target?Math.round(actual/target*100):0;plan.push([y,f.owner,code,name,...monthVals,actual,target,pct+'%']);});});
-  allTransactions().forEach(t=>{const code=canonicalFundCode(t.fundName);inv.push([t.id,t.date,t.year,t.month,t.owner,t.fundId,code,FUND_MASTER[code]?.displayName||code,t.amount,t.note||'']);});
+  allTransactions().forEach(t=>{const code=canonicalFundCode(t.fundName);inv.push([t.id,t.date,t.year,t.month,t.owner,t.fundId,code,FUND_MASTER[code]?.displayName||code,t.amount,t.note||'',Number(t.units)||'',Number(t.purchaseNav)||'']);});
   return{funds,master,plan,inv};
 }
 
@@ -2629,11 +2692,12 @@ async function pushToSheets(){if(!sheetsToken||!sheetId)return;updateSheetUI('sy
   await clearAndWriteSheet('Funds',x.funds);await clearAndWriteSheet('FundMaster',x.master);await clearAndWriteSheet('PlanMaster',x.plan);await clearAndWriteSheet('Investments',x.inv);localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');}
 async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Error('not connected');updateSheetUI('syncing');
   try{localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync',localStorage.getItem(STORAGE_KEY)||'');localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync_at',new Date().toISOString());}catch(e){}
-  const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=Funds%21A:I&ranges=FundMaster%21A:I&ranges=PlanMaster%21A:V&ranges=Investments%21A:J`),v=j.valueRanges||[],fr=v[0]?.values||[],mr=v[1]?.values||[],pr=v[2]?.values||[],ir=v[3]?.values||[];
+  const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=Funds%21A:I&ranges=FundMaster%21A:I&ranges=PlanMaster%21A:V&ranges=Investments%21A:L&ranges=FundNAV_History%21A:H`),v=j.valueRanges||[],fr=v[0]?.values||[],mr=v[1]?.values||[],pr=v[2]?.values||[],ir=v[3]?.values||[],hr=v[4]?.values||[];
   let map=new Map();
   const masterByCode={};
   (mr.slice(1)||[]).forEach(r=>{if(!r[0])return;masterByCode[r[0]]={displayName:r[1]||r[0],officialName:r[2]||'',manager:r[3]||'',assetClass:r[4]||'',nav:r[5]!==''?Number(r[5]):undefined,date:r[6]||'',source:r[7]||'',active:String(r[8]).toUpperCase()!=='FALSE'};});
   Object.entries(masterByCode).forEach(([code,m])=>{if(m.displayName)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};if(m.nav!==undefined)FUND_NAV[code]={nav:m.nav,date:m.date,source:m.source};});
+  setNavHistoryRows((hr.slice(1)||[]));
   try{const reg=JSON.parse(localStorage.getItem('fund_master_web_registry_v1')||'{}');Object.entries(reg||{}).forEach(([code,m])=>{if(code&&!FUND_MASTER[code])FUND_MASTER[code]=m;else if(code&&m?.webAdded)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};});}catch(e){}
   (fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||r[3]||'');map.set(r[0],{id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[7]).toUpperCase()==='TRUE',target:Number(r[8])||0,years:{},transactions:[]});});
   if(!map.size){(fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||'');map.set(r[0],{id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[3]).toUpperCase()==='TRUE',target:Number(r[4])||0,years:{},transactions:[]});});}
@@ -2665,7 +2729,7 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       planByIdentity.set(key,row); planRows.push(row);
     }
   });
-  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f)f.transactions.push({id:r[0],date:r[1],year:Number(r[2]),month:Number(r[3]),amount:Number(r[8]??r[7])||0,note:String(r[9]??'')});});
+  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f)f.transactions.push({id:r[0],date:r[1],year:Number(r[2]),month:Number(r[3]),amount:Number(r[8]??r[7])||0,note:String(r[9]??''),units:Number(r[10])||0,purchaseNav:Number(r[11])||0});});
   // One Portfolio record per Owner + Fund Code. Different owners may still hold the same fund.
   const beforeFundDedupCount=map.size;
   const dedupedRemoteFunds=dedupeFundsByOwnerCode([...map.values()]);
@@ -2687,6 +2751,7 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     map=remoteById;
   }
   map.forEach(rebuildFundMonths);
+  map.forEach(f=>(f.transactions||[]).forEach(t=>enrichTransactionUnits(t,f.name)));
   // Apply PlanMaster after rebuilding actual transactions. The monthly table is the plan view,
   // while Investments remains the transaction history. PlanMaster therefore wins for monthly cells.
   planRows.forEach(({f,y,months,actual,target,pct})=>{
