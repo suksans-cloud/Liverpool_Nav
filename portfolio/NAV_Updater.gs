@@ -1,0 +1,206 @@
+/**
+ * My Family Funds — NAV Auto Updater V41
+ *
+ * Google Sheets structure:
+ *   FundMaster       = current/latest NAV used by My Funds
+ *   FundNAV_History  = one row per fund per NAV date (history for charts/returns)
+ *
+ * Sources implemented:
+ *   - SCBAM official Daily NAV feed
+ *   - TALIS official NAV summary page
+ *   - KKP NAV table published by Krungsri's mutual-fund NAV page
+ * FundMaster is the live/current NAV source used by My Funds.
+ * FundNAV_History stores one row per fund per NAV date.
+ */
+const NAV_SOURCE_URL_SCBAM = 'https://www.scbam.com/medias/inc/navmail.html';
+const NAV_SOURCE_URL_TALIS = 'https://nav.talisam.co.th/index_NAV_Sum.jsp?p_lang=EN';
+const NAV_SOURCE_URL_KKP = 'https://www.krungsri.com/th/personal/mutual-fund/net-asset-value';
+const NAV_TAB = 'FundMaster';
+const NAV_HISTORY_TAB = 'FundNAV_History';
+const NAV_UPDATE_HOUR = 19; // Asia/Bangkok
+
+function ensureNavHistorySheet_(){
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(NAV_HISTORY_TAB);
+  if(!sh) sh = ss.insertSheet(NAV_HISTORY_TAB);
+  if(sh.getLastRow() === 0){
+    sh.getRange(1,1,1,8).setValues([[
+      'Date','Fund Code','NAV','Change','Change %','Source','Updated At','NAV Date Text'
+    ]]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function normalizeNavDate_(dateText){
+  const s = String(dateText || '').trim();
+  // Keep the source text for display, but return a stable key for de-duplication.
+  const m = s.match(/(\d{1,2})\s*(?:\/|-|\.)\s*(\d{1,2})\s*(?:\/|-|\.)\s*(\d{4})/);
+  if(!m) return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Bangkok','yyyy-MM-dd');
+  let y=Number(m[3]); if(y>2400)y-=543; return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+}
+
+function parseScbamNavFeed_(html, wanted){
+  const text = String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi,' ')
+    .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    .replace(/<[^>]+>/g,' | ')
+    .replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&')
+    .replace(/\s+/g,' ');
+
+  const updates = {};
+  wanted.forEach(code=>{
+    if(!/^SCB/i.test(code)) return;
+    // The SCBAM feed commonly renders the code as (CODE). Accept optional spaces.
+    const escaped = String(code).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const re = new RegExp('\\(\\s*'+escaped+'\\s*\\)','i');
+    const hit = re.exec(text);
+    if(!hit) return;
+    const chunk = text.slice(hit.index, hit.index + 800);
+    const nums = chunk.match(/\b\d{1,4}\.\d{4}\b/g) || [];
+    if(!nums.length) return;
+    const nav = Number(nums[0]);
+    if(!isFinite(nav) || nav <= 0) return;
+    const dateMatch = chunk.match(/(\d{1,2})\s*(?:\/|-|\.)\s*(\d{1,2})\s*(?:\/|-|\.)\s*(\d{4})/);
+    const dateText = dateMatch ? dateMatch[0] : Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Bangkok','dd/MM/yyyy');
+    updates[code] = {nav:nav,dateText:dateText,dateKey:normalizeNavDate_(dateText)};
+  });
+  return updates;
+}
+
+function fetchText_(url){
+  const r=UrlFetchApp.fetch(url,{muteHttpExceptions:true,headers:{'User-Agent':'Mozilla/5.0'}});
+  if(r.getResponseCode()!==200) throw new Error('NAV source HTTP '+r.getResponseCode()+': '+url);
+  return r.getContentText('UTF-8');
+}
+
+function cleanHtmlText_(html){
+  return String(html||'')
+    .replace(/<script[\s\S]*?<\/script>/gi,' ')
+    .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    .replace(/<[^>]+>/g,' | ')
+    .replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&')
+    .replace(/&#39;/gi,"'")
+    .replace(/&quot;/gi,'"')
+    .replace(/\s+/g,' ');
+}
+
+function parseManagerTable_(html,wanted,managerName){
+  const text=cleanHtmlText_(html);
+  const updates={};
+  wanted.forEach(code=>{
+    const escaped=String(code).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    let re;
+    if(managerName==='TALIS') re=new RegExp('(?:^|[| ])'+escaped+'(?:[| ]|$)','i');
+    else re=new RegExp('(?:^|[| ])'+escaped.replace(/ /g,'\\s*')+'(?:[| ]|$)','i');
+    const hit=re.exec(text); if(!hit)return;
+    const chunk=text.slice(Math.max(0,hit.index-80),hit.index+900);
+    // Both pages place NAV and NAV date close to the fund code. Prefer a decimal
+    // immediately after the code; otherwise use the first plausible 4-decimal NAV.
+    const after=text.slice(hit.index,hit.index+450);
+    const nums=after.match(/\b\d{1,4}\.\d{4}\b/g)||[];
+    if(!nums.length)return;
+    const nav=Number(nums[0]); if(!isFinite(nav)||nav<=0)return;
+    const dm=chunk.match(/(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/);
+    let dateText=dm?dm[0]:Utilities.formatDate(new Date(),Session.getScriptTimeZone()||'Asia/Bangkok','dd/MM/yyyy');
+    // Krungsri uses Buddhist year; normalizeNavDate_ accepts 4 digits but stores the source text.
+    updates[code]={nav:nav,dateText:dateText,dateKey:normalizeNavDate_(dateText)};
+  });
+  return updates;
+}
+
+function collectFundMasterRows_(){
+  const ss=SpreadsheetApp.getActive(); const sh=ss.getSheetByName(NAV_TAB);
+  if(!sh)throw new Error('ไม่พบชีต FundMaster');
+  const values=sh.getDataRange().getValues();
+  const rows=[];
+  for(let r=1;r<values.length;r++){
+    const code=String(values[r][0]||'').trim();
+    const manager=String(values[r][3]||'').trim().toUpperCase();
+    if(code)rows.push({row:r+1,code,manager,oldNav:Number(values[r][5])});
+  }
+  return {sh,values,rows};
+}
+
+function writeNavUpdates_(ctx,updates,sourceLabel){
+  const historySh=ensureNavHistorySheet_();
+  const now=new Date(); const tz=Session.getScriptTimeZone()||'Asia/Bangkok';
+  const updatedAt=Utilities.formatDate(now,tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
+  const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
+  const keys=new Set(existing.map(r=>String(r[0])+'|'+String(r[1])));
+  const historyRows=[]; let count=0;
+  ctx.rows.forEach(item=>{
+    const u=updates[item.code]; if(!u)return;
+    const oldNav=isFinite(item.oldNav)&&item.oldNav>0?item.oldNav:null;
+    const change=oldNav===null?'':u.nav-oldNav;
+    const changePct=oldNav===null?'':(change/oldNav*100);
+    ctx.sh.getRange(item.row,6,1,3).setValues([[u.nav,u.dateText,sourceLabel]]);
+    count++;
+    const key=u.dateKey+'|'+item.code;
+    if(!keys.has(key)){
+      historyRows.push([u.dateKey,item.code,u.nav,change,changePct,sourceLabel,updatedAt,u.dateText]);
+      keys.add(key);
+    }
+  });
+  if(historyRows.length)historySh.getRange(historySh.getLastRow()+1,1,historyRows.length,8).setValues(historyRows);
+  return {updated:count,history:historyRows.length};
+}
+
+function updateAllNAVs(){
+  const ctx=collectFundMasterRows_();
+  if(!ctx.rows.length)return {updated:0,history:0,message:'FundMaster ยังไม่มีข้อมูล'};
+  let totalUpdated=0,totalHistory=0;
+
+  // SCBAM
+  try{
+    const wanted=ctx.rows.filter(x=>x.manager==='SCBAM').map(x=>x.code);
+    if(wanted.length){
+      const u=parseScbamNavFeed_(fetchText_(NAV_SOURCE_URL_SCBAM),wanted);
+      const r=writeNavUpdates_(ctx,u,'SCBAM Official NAV feed'); totalUpdated+=r.updated;totalHistory+=r.history;
+    }
+  }catch(e){Logger.log('SCBAM update failed: '+e);}
+
+  // TALIS
+  try{
+    const wanted=ctx.rows.filter(x=>x.manager==='TALIS').map(x=>x.code);
+    if(wanted.length){
+      const u=parseManagerTable_(fetchText_(NAV_SOURCE_URL_TALIS),wanted,'TALIS');
+      const r=writeNavUpdates_(ctx,u,'TALIS Official NAV summary'); totalUpdated+=r.updated;totalHistory+=r.history;
+    }
+  }catch(e){Logger.log('TALIS update failed: '+e);}
+
+  // KKPAM. The public NAV table is hosted on Krungsri's site and may not publish
+  // every KKP fund every day. Missing rows are intentionally left unchanged.
+  try{
+    const wanted=ctx.rows.filter(x=>x.manager==='KKPAM').map(x=>x.code);
+    if(wanted.length){
+      const u=parseManagerTable_(fetchText_(NAV_SOURCE_URL_KKP),wanted,'KKPAM');
+      const r=writeNavUpdates_(ctx,u,'KKP NAV table'); totalUpdated+=r.updated;totalHistory+=r.history;
+    }
+  }catch(e){Logger.log('KKP update failed: '+e);}
+
+  const now=new Date();
+  PropertiesService.getDocumentProperties().setProperty('NAV_LAST_UPDATE',now.toISOString());
+  return {updated:totalUpdated,history:totalHistory,at:now.toISOString()};
+}
+
+// Backward-compatible menu/function name.
+function updateSCBAMNavs(){ return updateAllNAVs(); }
+
+function setupNAVAutoUpdate(){
+  ScriptApp.getProjectTriggers().forEach(t=>{
+    const fn=t.getHandlerFunction();
+    if(fn==='updateSCBAMNavs'||fn==='updateAllNAVs')ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('updateAllNAVs').timeBased().everyDays(1).atHour(NAV_UPDATE_HOUR).create();
+  return updateAllNAVs();
+}
+
+function onOpen(){
+  SpreadsheetApp.getUi().createMenu('My Family Funds')
+    .addItem('อัปเดต NAV ทุกกองตอนนี้','updateAllNAVs')
+    .addItem('ตั้งเวลาอัปเดต NAV ทุกวัน','setupNAVAutoUpdate')
+    .addToUi();
+}
