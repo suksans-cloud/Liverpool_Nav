@@ -1192,7 +1192,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V55 DCA Multi-Date QA';
+const APP_BUILD = 'V56 DCA Multi-Date QA Fix';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2728,7 +2728,16 @@ function openFinanceDcaTest(){
  const list=financeMyFundsList();
  const candidates=list.map(x=>{
    const code=canonicalFundCode(x.ticker);
-   const arr=(FUND_NAV_HISTORY_BY_CODE[code]||[]).filter(v=>v?.date&&Number(v.nav)>0).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+   const raw=(FUND_NAV_HISTORY_BY_CODE[code]||[]).filter(v=>v?.date&&Number(v.nav)>0);
+   // History may contain duplicate rows for the same fund/date.  Collapse them
+   // by date first so the DCA QA can never present the same calendar date twice.
+   const byDate=new Map();
+   raw.forEach(v=>{
+     const key=String(v.date).slice(0,10);
+     const prev=byDate.get(key);
+     if(!prev || String(v.date)>=String(prev.date)) byDate.set(key,{...v,date:key,nav:Number(v.nav)});
+   });
+   const arr=[...byDate.values()].filter(v=>Number(v.nav)>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
    return {item:x,code,arr};
  }).sort((a,b)=>{
    const ap=a.code==='SCBNK225E'?1:0, bp=b.code==='SCBNK225E'?1:0;
@@ -2750,7 +2759,7 @@ function openFinanceDcaTest(){
  const arr=chosen.arr;
  const latest=Number(FUND_NAV[code]?.nav)||Number(arr.at(-1)?.nav)||0;
  if(!latest){body.innerHTML='<div class="chart-empty">ยังไม่มี NAV สำหรับกองทุนนี้</div>';overlay.hidden=false;return;}
- const selected=arr.slice(-3); // three genuinely different historical dates
+ const selected=arr.slice(-3); // three unique calendar dates after de-duplication
  const amounts=[1000,2000,3000];
  let total=0,units=0,rows='';
  for(let i=0;i<selected.length;i++){
@@ -2762,7 +2771,7 @@ function openFinanceDcaTest(){
  }
  const value=units*latest,pnl=value-total,pct=total?(pnl/total*100):0;
  const datesText=selected.map(x=>x.date).join(', ');
- body.innerHTML=`<div class="finance-detail-note">กองทุน <b>${esc(code)}</b> • NAV ปัจจุบัน ${esc(moneyNAV(latest)||'—')} • ใช้ NAV History จริง 3 วันที่แตกต่างกัน</div><table class="finance-dca-test-table"><thead><tr><th>วันที่</th><th>เงินซื้อ</th><th>NAV ซื้อ</th><th>หน่วย</th></tr></thead><tbody>${rows}</tbody></table><div class="finance-dca-test-total"><b>รวมเงินจำลอง:</b> ${fmtBaht(total)}<br><b>รวมหน่วย:</b> ${fmtUnits(units)}<br><b>มูลค่าปัจจุบันจำลอง:</b> ${fmtBaht(value)}<br><b>กำไร/ขาดทุนจำลอง:</b> ${fmtSignedBaht(pnl)} (${fmtSignedPct(pct)})</div><div class="finance-dca-test-note">ข้อมูลนี้เป็นการจำลอง 3 งวด โดยใช้วันที่ ${datesText} จาก FundNAV_History จริง และจะไม่บันทึกลง Investments หรือ Google Sheets</div>`;
+ body.innerHTML=`<div class="finance-detail-note">กองทุน <b>${esc(code)}</b> • NAV ปัจจุบัน ${esc(moneyNAV(latest)||'—')} • ใช้ NAV History จริง 3 วันที่แตกต่างกัน (ตัดวันที่ซ้ำแล้ว)</div><table class="finance-dca-test-table"><thead><tr><th>วันที่</th><th>เงินซื้อ</th><th>NAV ซื้อ</th><th>หน่วย</th></tr></thead><tbody>${rows}</tbody></table><div class="finance-dca-test-total"><b>รวมเงินจำลอง:</b> ${fmtBaht(total)}<br><b>รวมหน่วย:</b> ${fmtUnits(units)}<br><b>มูลค่าปัจจุบันจำลอง:</b> ${fmtBaht(value)}<br><b>กำไร/ขาดทุนจำลอง:</b> ${fmtSignedBaht(pnl)} (${fmtSignedPct(pct)})</div><div class="finance-dca-test-note">ข้อมูลนี้เป็นการจำลอง 3 งวด โดยใช้วันที่ ${datesText} จาก FundNAV_History จริง และจะไม่บันทึกลง Investments หรือ Google Sheets</div>`;
  overlay.hidden=false;
 }
 document.getElementById('financeDcaTestBtn')?.addEventListener('click',openFinanceDcaTest);
