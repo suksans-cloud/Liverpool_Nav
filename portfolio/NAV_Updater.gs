@@ -23,7 +23,7 @@ const NAV_STATUS_TAB = 'NAV_Update_Log';
 const NAV_SOURCE_URL_SCBAM_HISTORY = 'https://www.scbam.com/en/fund/nav-historical/';
 
 function parseScbamHistoricalNav_(html, wanted){
-  const text=cleanHtmlText_(html);
+  const text=cleanScbamHistoricalText_(html);
   const updates={};
   wanted.forEach(code=>{
     const escaped=String(code).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -95,6 +95,20 @@ function backfillScbamNavHistory(){
   return {history:rows.length,dates:dateSet.size,updatedFunds:funds};
 }
 
+function backfillScbamNavHistoryNow(){
+  const ui=SpreadsheetApp.getUi();
+  try{
+    const r=backfillScbamNavHistory();
+    ui.alert('SCBAM NAV History',
+      'เติมประวัติ NAV สำเร็จ\n\nกองทุนที่พบ: '+(r.updatedFunds||0)+' กองทุน\nแถวใหม่ที่เพิ่ม: '+(r.history||0)+' แถว\nวันที่ใหม่: '+(r.dates||0)+' วัน',
+      ui.ButtonSet.OK);
+    return r;
+  }catch(e){
+    logNavRun_('ERROR',0,0,'backfillScbamNavHistory',String(e&&e.message||e));
+    ui.alert('SCBAM NAV History Error',String(e&&e.message||e),ui.ButtonSet.OK);
+    throw e;
+  }
+}
 
 function ensureNavStatusSheet_(){
   const ss=SpreadsheetApp.getActive();
@@ -165,10 +179,29 @@ function fetchText_(url){
   return r.getContentText('UTF-8');
 }
 
+function cleanScbamHistoricalText_(html){
+  return String(html||'')
+    .replace(/<script[\s\S]*?<\/script>/gi,' ')
+    .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    // Recent SCBAM historical NAV values may be inside image attributes.
+    .replace(/<img\b[^>]*(?:alt|title|data-value|value)\s*=\s*[\"']([^\"']+)[\"'][^>]*>/gi,' $1 ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&')
+    .replace(/&#39;/gi,"'")
+    .replace(/&quot;/gi,'"')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
 function cleanHtmlText_(html){
   return String(html||'')
     .replace(/<script[\s\S]*?<\/script>/gi,' ')
     .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    // SCBAM's NAV Historical page renders some of the newest NAV values
+    // inside <img> tags. Keep common value-bearing attributes before stripping
+    // the remaining HTML, otherwise recent dates can disappear from History.
+    .replace(/<img\b[^>]*(?:alt|title|data-value|value)\s*=\s*[\"']([^\"']+)[\"'][^>]*>/gi,' $1 ')
     .replace(/<[^>]+>/g,' | ')
     .replace(/&nbsp;/gi,' ')
     .replace(/&amp;/gi,'&')
@@ -315,7 +348,7 @@ function onOpen(){
     .addSeparator()
     .addItem('📊 เปิด NAV History','openNAVHistory_')
     .addItem('📝 บันทึก NAV ปัจจุบันลง History','recordCurrentNAVToHistory')
-    .addItem('📥 เติม NAV History ย้อนหลัง (SCBAM)','backfillScbamNavHistory')
+    .addItem('📥 เติม NAV History ย้อนหลัง (SCBAM)','backfillScbamNavHistoryNow')
     .addItem('🧾 เปิด NAV Update Log','openNAVLog_')
     .addToUi();
 }
