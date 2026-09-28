@@ -1192,7 +1192,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V56 DCA Multi-Date QA Fix';
+const APP_BUILD = 'V59 Portfolio Unit Reconciliation';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2138,7 +2138,7 @@ function activateView(view, opts){
           // เพื่อไม่ให้ขึ้นข้อความ "Google API ยังโหลดไม่เสร็จ" โดยไม่จำเป็น
           for(let i=0;i<20 && !window.google?.accounts?.oauth2;i++) await new Promise(r=>setTimeout(r,200));
           if(!window.google?.accounts?.oauth2) return;
-          if(await ensureSheetsAccess(false)){ await pullFromSheets({safeMerge:false}); await pullMarketWatch(); }
+          if(await ensureSheetsAccess(false)){ await pullFromSheets({safeMerge:false}); await pullMarketWatch(); await reconcileTransactionUnitsToSheets({silent:true}); renderFinanceCards(); }
         }catch(e){ console.warn('Finance view auto sync', e); }
       })();
     }
@@ -2485,7 +2485,7 @@ function financeListForTab(tab){
 function financeFundPortfolio(code){
  const canonical=canonicalFundCode(code);
  const records=DATA.funds.filter(f=>canonicalFundCode(f.name)===canonical);
- let invested=0, usedPlanFallback=false, totalTransactions=0, pendingTransactions=0;
+ let invested=0, investedWithUnits=0, pendingInvested=0, usedPlanFallback=false, totalTransactions=0, pendingTransactions=0;
  const txRecords=[];
  records.forEach(f=>{
    const txs=Array.isArray(f.transactions)?f.transactions:[];
@@ -2495,7 +2495,14 @@ function financeFundPortfolio(code){
        if(amount<=0)return;
        invested+=amount; totalTransactions++;
        if(!(Number(t.units)>0)) enrichTransactionUnits(t,canonical);
-       if(Number(t.units)>0) txRecords.push(t); else pendingTransactions++;
+       if(Number(t.units)>0){
+         const units=Number(t.units);
+         txRecords.push(t);
+         investedWithUnits+=amount;
+       } else {
+         pendingTransactions++;
+         pendingInvested+=amount;
+       }
      });
    }else{
      Object.values(f.years||{}).forEach(yd=>{
@@ -2507,11 +2514,12 @@ function financeFundPortfolio(code){
  });
  const units=txRecords.reduce((sum,t)=>sum+(Number(t.units)||0),0);
  const nav=Number(FUND_NAV[canonical]?.nav);
- const hasCompleteUnits=totalTransactions>0 && pendingTransactions===0 && units>0 && isFinite(nav) && nav>0;
- const value=hasCompleteUnits?units*nav:null;
- const pnl=value==null?null:value-invested;
- const pct=value==null||invested<=0?null:(pnl/invested*100);
- return {invested,units,nav,value,pnl,pct,hasUnits:hasCompleteUnits,records,usedPlanFallback,totalTransactions,pendingTransactions};
+ const hasUnits=totalTransactions>0 && units>0 && isFinite(nav) && nav>0;
+ const completeUnits=hasUnits && pendingTransactions===0;
+ const value=hasUnits?units*nav:null;
+ const pnl=value==null?null:value-investedWithUnits;
+ const pct=value==null||investedWithUnits<=0?null:(pnl/investedWithUnits*100);
+ return {invested,investedWithUnits,pendingInvested,units,nav,value,pnl,pct,hasUnits,completeUnits,records,usedPlanFallback,totalTransactions,pendingTransactions};
 }
 
 function fmtBaht(v){
@@ -2894,7 +2902,16 @@ async function saveMarketManager(){localStorage.setItem('market_assets_v3982',JS
 document.querySelectorAll('#financeSeg button').forEach(b=>b.classList.toggle('active',b.dataset.tab===financeTab));
 marketInitial();renderFinanceCards();
 document.getElementById('marketRefreshBtn')?.addEventListener('click',()=>pullMarketWatch().then(()=>showToast('อัปเดต Market Watch แล้ว')));
-document.getElementById('financeRefreshBtn')?.addEventListener('click',()=>pullMarketWatch().then(()=>showToast('อัปเดต Finance แล้ว')));
+async function refreshFinanceData(){
+  try{
+    if(sheetsToken&&sheetId) await pullFromSheets({safeMerge:false});
+    await pullMarketWatch();
+    await reconcileTransactionUnitsToSheets({silent:true});
+    renderFinanceCards();
+    showToast('อัปเดต Finance + NAV History แล้ว');
+  }catch(e){ console.warn('Finance refresh',e); showToast('อัปเดต Finance ไม่สำเร็จ'); }
+}
+document.getElementById('financeRefreshBtn')?.addEventListener('click',refreshFinanceData);
 document.getElementById('marketManagerBtn')?.addEventListener('click',()=>{setManagerTab(financeTab);document.getElementById('marketManagerModal').hidden=false;});
 document.getElementById('marketManagerClose')?.addEventListener('click',()=>document.getElementById('marketManagerModal').hidden=true);
 document.getElementById('marketAddBtn')?.addEventListener('click',addMarketSymbol); document.getElementById('marketSymbolInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addMarketSymbol();}});
@@ -2933,7 +2950,7 @@ function sheetRows(){
   const funds=[['ID','Owner','Fund Code','Display Name','Official Fund Name','Manager','Asset Class','Favorite','Target/Year']],
         master=[['Fund Code','Display Name','Official Fund Name','Manager','Asset Class','NAV','NAV Date','NAV Source','Active']],
         plan=[['Year','Owner','Fund Code','Display Name',...MONTHS,'เงินลงทุนจริง','เป้าหมาย/ปี','% ของเป้าหมาย']],
-        inv=[['Transaction ID','Date','Year','Month','Owner','Fund ID','Fund Code','Fund Name','Amount','Note']];
+        inv=[['Transaction ID','Date','Year','Month','Owner','Fund ID','Fund Code','Fund Name','Amount','Note','Units','Purchase NAV']];
   Object.entries(FUND_MASTER).forEach(([code,m])=>{const n=FUND_NAV[code]||{};master.push([code,m.displayName,m.officialName||'',m.manager||'',m.assetClass||'',n.nav??'',n.date??'',n.source??'', 'TRUE']);});
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),m=FUND_MASTER[code]||{};funds.push([f.id,f.owner,code,m.displayName||code,m.officialName||'',m.manager||'',m.assetClass||'',f.favorite?'TRUE':'FALSE',fundTarget(f)]);});
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),name=(FUND_MASTER[code]?.displayName||code);const years=Object.keys(f.years||{}).map(Number).filter(Boolean).sort((a,b)=>a-b);const ys=years.length?years:[selectedYear];ys.forEach(y=>{const yd=yearData(f,y,true);const monthVals=MONTHS.map((_,i)=>Number((yd.planMonths||{})[i+1])||0);
@@ -3037,17 +3054,37 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     yd.masterPct=pct;
     yd.target=Number(target)||0;
   });
+  let transactionUnitsEnriched=false;
   if(map.size){
     DATA={funds:dedupeFundsByOwnerCode([...map.values()])};
     DATA.funds.forEach(f=>{ normalizeFund(f); (f.transactions||[]).forEach(t=>{ if(t) t.fundId=f.id; }); });
+    transactionUnitsEnriched=enrichAllTransactionUnits();
     localStorage.setItem(STORAGE_KEY,JSON.stringify(DATA));renderAll();
   }
-  if(duplicateFundRowsRemoved>0){
-    // Clean the cloud database too, so the duplicate cannot come back on the next pull.
+  if(duplicateFundRowsRemoved>0 || transactionUnitsEnriched){
+    // Clean the cloud database too, so duplicates and newly-resolved purchase units
+    // do not disappear on the next pull. Investments remains the transaction history.
     await pushToSheets();
-    showToast('จัดระเบียบฐานข้อมูลแล้ว • รวมกองทุนซ้ำ '+duplicateFundRowsRemoved+' รายการ');
+    if(duplicateFundRowsRemoved>0 && transactionUnitsEnriched) showToast('จัดระเบียบฐานข้อมูลแล้ว • เติม NAV ซื้อ/หน่วยจาก History แล้ว');
+    else if(duplicateFundRowsRemoved>0) showToast('จัดระเบียบฐานข้อมูลแล้ว • รวมกองทุนซ้ำ '+duplicateFundRowsRemoved+' รายการ');
+    else showToast('เติม NAV ซื้อและจำนวนหน่วยจาก NAV History แล้ว');
   }
   localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');return map.size;}
+async function reconcileTransactionUnitsToSheets(options={}){
+  const changed=enrichAllTransactionUnits();
+  if(!changed)return false;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  localStorage.setItem(STORAGE_KEY+'_last_updated', new Date().toISOString());
+  updateLastUpdated();
+  renderAll();
+  if(sheetsToken&&sheetId){
+    try{ await pushToSheets(); }
+    catch(e){ console.warn('Transaction unit reconciliation sync failed',e); }
+  }
+  if(!options.silent) showToast('เติม NAV ซื้อและจำนวนหน่วยจาก NAV History แล้ว');
+  return true;
+}
+
 function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>pushToSheets().catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
