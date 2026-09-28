@@ -825,7 +825,7 @@
           <div class="finance-main-icon">📈</div>
           <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">Market Watch • My funds • ETF • Stock</div></div>
         </div>
-        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
+        <div class="finance-main-actions"><button class="tool-btn" id="financeDcaTestBtn">🧪 ทดสอบ DCA</button><button class="tool-btn" id="financePurchasePnlTestBtn">🧮 ทดสอบ P/L</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
       </div>
       <div class="finance-seg finance-main-tabs" id="financeSeg">
         <button type="button" class="active" data-tab="fund">My funds</button>
@@ -1172,6 +1172,14 @@
     <div id="financeDcaTestBody" class="finance-detail-section"></div>
   </div>
 </div>
+<div class="fund-detail-overlay finance-modal" id="financePurchasePnlTestOverlay" hidden>
+  <div class="fund-detail-sheet">
+    <button class="fund-detail-close" id="financePurchasePnlTestClose" type="button">×</button>
+    <div class="fund-detail-title">ทดสอบ P/L จาก NAV วันที่ซื้อ (ไม่บันทึกข้อมูลจริง)</div>
+    <div class="fund-detail-symbol">ซื้อจำลอง 1 รายการด้วย NAV ย้อนหลัง แล้วตีมูลค่าด้วย NAV ปัจจุบัน</div>
+    <div id="financePurchasePnlTestBody" class="finance-detail-section"></div>
+  </div>
+</div>
 <div class="fund-detail-overlay finance-modal" id="financeDetailOverlay" hidden>
   <div class="fund-detail-sheet">
     <button class="fund-detail-close" id="financeDetailClose">×</button>
@@ -1192,7 +1200,7 @@
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V59 Portfolio Unit Reconciliation';
+const APP_BUILD = 'V60 Purchase NAV P&L QA';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2782,8 +2790,49 @@ function openFinanceDcaTest(){
  body.innerHTML=`<div class="finance-detail-note">กองทุน <b>${esc(code)}</b> • NAV ปัจจุบัน ${esc(moneyNAV(latest)||'—')} • ใช้ NAV History จริง 3 วันที่แตกต่างกัน (ตัดวันที่ซ้ำแล้ว)</div><table class="finance-dca-test-table"><thead><tr><th>วันที่</th><th>เงินซื้อ</th><th>NAV ซื้อ</th><th>หน่วย</th></tr></thead><tbody>${rows}</tbody></table><div class="finance-dca-test-total"><b>รวมเงินจำลอง:</b> ${fmtBaht(total)}<br><b>รวมหน่วย:</b> ${fmtUnits(units)}<br><b>มูลค่าปัจจุบันจำลอง:</b> ${fmtBaht(value)}<br><b>กำไร/ขาดทุนจำลอง:</b> ${fmtSignedBaht(pnl)} (${fmtSignedPct(pct)})</div><div class="finance-dca-test-note">ข้อมูลนี้เป็นการจำลอง 3 งวด โดยใช้วันที่ ${datesText} จาก FundNAV_History จริง และจะไม่บันทึกลง Investments หรือ Google Sheets</div>`;
  overlay.hidden=false;
 }
+function openFinancePurchasePnlTest(){
+ const list=financeMyFundsList();
+ const candidates=list.map(x=>{
+   const code=canonicalFundCode(x.ticker);
+   const raw=(FUND_NAV_HISTORY_BY_CODE[code]||[]).filter(v=>v?.date&&Number(v.nav)>0);
+   const byDate=new Map();
+   raw.forEach(v=>{const key=String(v.date).slice(0,10);const prev=byDate.get(key);if(!prev||String(v.date)>=String(prev.date))byDate.set(key,{...v,date:key,nav:Number(v.nav)});});
+   const arr=[...byDate.values()].filter(v=>Number(v.nav)>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+   return {item:x,code,arr};
+ }).sort((a,b)=>{
+   const ap=a.code==='SCBNK225E'?1:0,bp=b.code==='SCBNK225E'?1:0;
+   if(ap!==bp)return bp-ap;
+   return b.arr.length-a.arr.length;
+ });
+ const body=document.getElementById('financePurchasePnlTestBody');
+ const overlay=document.getElementById('financePurchasePnlTestOverlay');
+ if(!body||!overlay)return;
+ const chosen=candidates.find(x=>x.arr.length>=2);
+ if(!chosen){
+   const best=candidates[0],available=best?.arr?.length||0;
+   body.innerHTML=`<div class="chart-empty">ยังทดสอบ P/L จาก NAV วันที่ซื้อไม่ได้</div><div class="finance-detail-note">ต้องมี NAV History อย่างน้อย 2 วันที่แตกต่างกันในกองทุนเดียวกัน${best?`<br>กองทุนที่พบข้อมูลมากที่สุด: <b>${esc(best.code)}</b> (${available} วัน)`:''}<br><br>ระบบจะไม่สร้าง NAV ย้อนหลังขึ้นมาเอง</div>`;
+   overlay.hidden=false;return;
+ }
+ const code=chosen.code,arr=chosen.arr;
+ const purchase=arr[0];
+ const latest=Number(FUND_NAV[code]?.nav)||Number(arr.at(-1)?.nav)||0;
+ if(!latest){body.innerHTML='<div class="chart-empty">ยังไม่มี NAV ปัจจุบันสำหรับกองทุนนี้</div>';overlay.hidden=false;return;}
+ const amount=2000;
+ const purchaseNav=Number(purchase.nav);
+ const units=amount/purchaseNav;
+ const value=units*latest;
+ const pnl=value-amount;
+ const pct=pnl/amount*100;
+ const sameDate=String(purchase.date)===String(FUND_NAV[code]?.date||'').slice(0,10);
+ body.innerHTML=`<div class="finance-detail-note"><b>${esc(code)}</b> • ใช้ NAV History จริงของวันที่ ${esc(purchase.date)} เป็น NAV ซื้อ และใช้ NAV ปัจจุบัน ${esc(moneyNAV(latest)||'—')} เป็นราคาประเมิน</div><table class="finance-dca-test-table"><thead><tr><th>รายการ</th><th>ค่า</th></tr></thead><tbody><tr><td>เงินซื้อจำลอง</td><td>${fmtBaht(amount)}</td></tr><tr><td>NAV วันที่ซื้อ</td><td>${purchaseNav.toFixed(4)}</td></tr><tr><td>จำนวนหน่วย</td><td>${fmtUnits(units)}</td></tr><tr><td>NAV ปัจจุบัน</td><td>${latest.toFixed(4)}</td></tr><tr><td>มูลค่าปัจจุบัน</td><td>${fmtBaht(value)}</td></tr><tr><td>กำไร/ขาดทุน</td><td>${fmtSignedBaht(pnl)}</td></tr><tr><td>ผลตอบแทน</td><td>${fmtSignedPct(pct)}</td></tr></tbody></table><div class="finance-dca-test-total"><b>สูตรตรวจ:</b><br>หน่วย = ${fmtBaht(amount)} ÷ ${purchaseNav.toFixed(4)} = ${fmtUnits(units)}<br>มูลค่าปัจจุบัน = ${fmtUnits(units)} × ${latest.toFixed(4)} ≈ ${fmtBaht(value)}<br>P/L = ${fmtBaht(value)} − ${fmtBaht(amount)} = ${fmtSignedBaht(pnl)}</div><div class="finance-dca-test-note">นี่เป็น QA จำลองเท่านั้น ไม่สร้างหรือแก้รายการใน Investments และไม่เขียนข้อมูลลง Google Sheets${sameDate?' • หมายเหตุ: NAV ซื้อเป็นวันเดียวกับ NAV ปัจจุบัน จึงควรได้ P/L ใกล้ศูนย์':''}</div>`;
+ overlay.hidden=false;
+}
+
 document.getElementById('financeDcaTestBtn')?.addEventListener('click',openFinanceDcaTest);
 document.getElementById('financeDcaTestClose')?.addEventListener('click',()=>{document.getElementById('financeDcaTestOverlay').hidden=true;});
+document.getElementById('financePurchasePnlTestBtn')?.addEventListener('click',openFinancePurchasePnlTest);
+document.getElementById('financePurchasePnlTestClose')?.addEventListener('click',()=>{document.getElementById('financePurchasePnlTestOverlay').hidden=true;});
+document.getElementById('financePurchasePnlTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financePurchasePnlTestOverlay')e.currentTarget.hidden=true;});
 document.getElementById('financeDcaTestOverlay')?.addEventListener('click',e=>{if(e.target.id==='financeDcaTestOverlay')e.currentTarget.hidden=true;});
 function setFinanceTab(tab){
  financeTab=tab;localStorage.setItem('finance_tab',financeTab);
