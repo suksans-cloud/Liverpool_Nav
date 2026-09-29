@@ -599,8 +599,13 @@
 .finance-main-icon{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:var(--primary-soft);color:var(--primary);font-size:20px;border:1px solid #D8E9E4;box-shadow:0 4px 12px rgba(15,91,77,.08)}
 .finance-main-title{font-size:18px;font-weight:950;letter-spacing:-.2px;color:var(--ink)}
 .finance-main-sub{font-size:11.5px;color:var(--ink-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.finance-main-actions{display:flex;gap:6px;flex:none}
-.finance-main-actions .tool-btn{height:30px;border-radius:9px;padding:0 8px;background:var(--bg);box-shadow:0 2px 8px rgba(15,91,77,.06);font-size:10.5px}
+.finance-refresh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;border-radius:10px;padding:0 10px;background:var(--bg);box-shadow:0 2px 8px rgba(15,91,77,.06);font-size:11px;font-weight:800;flex:none}
+.finance-refresh-btn svg{width:16px;height:16px;flex:none}
+.finance-portfolio-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0 0 10px;padding:6px;border:1px solid #DDE8E4;border-radius:14px;background:#F5F9F7}
+.finance-portfolio-actions[hidden]{display:none}
+.finance-portfolio-actions .tool-btn{min-width:0;min-height:36px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #DCE7E3;background:#fff;color:var(--primary);border-radius:10px;padding:0 7px;font-size:10.5px;font-weight:800;box-shadow:0 2px 8px rgba(15,91,77,.05)}
+.finance-portfolio-actions .tool-btn svg{width:15px;height:15px;flex:none}
+.finance-portfolio-actions .tool-btn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .finance-market-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;margin-bottom:10px;border:1px solid #DCE9E5;border-radius:12px;background:#F2F8F6;color:var(--ink-soft);font-size:11.5px}
 .finance-market-status .status-left{display:flex;align-items:center;gap:6px;min-width:0}
 .finance-market-status .live-dot{width:7px;height:7px;border-radius:50%;background:#35A978;box-shadow:0 0 0 3px rgba(53,169,120,.10);flex:none}
@@ -635,9 +640,11 @@
  .finance-main-icon{width:38px;height:38px;border-radius:11px;font-size:18px}
  .finance-main-title{font-size:16px}
  .finance-main-sub{font-size:10.5px;max-width:190px}
- .finance-main-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:6px;min-width:0}
- .finance-main-actions .tool-btn{height:32px;padding:0 6px;font-size:10px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .finance-main-actions .tool-btn:last-child{grid-column:1/-1}
+ .finance-main-head{position:relative}
+ .finance-refresh-btn{width:100%;max-width:96px;align-self:flex-end;height:34px;font-size:10.5px}
+ .finance-portfolio-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:5px;margin-bottom:9px}
+ .finance-portfolio-actions .tool-btn{width:100%;min-width:0;min-height:36px;padding:0 6px;font-size:10px}
+ .finance-portfolio-actions .tool-btn svg{width:15px;height:15px}
  .finance-history-filter{display:grid !important;grid-template-columns:auto minmax(0,1fr);gap:7px !important;align-items:center !important;width:100%;min-width:0}
  .finance-history-filter label{white-space:nowrap}
  .finance-history-select{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;height:38px;padding:0 30px 0 10px;border:1px solid #d7e3df;border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:12.5px;line-height:38px;overflow:hidden;text-overflow:ellipsis}
@@ -650,12 +657,50 @@
 }
 @media(max-width:380px){
  .finance-main-panel{padding:10px}
- .finance-main-actions .tool-btn{font-size:9.5px;padding:0 4px}
  .finance-history-card{padding-left:8px;padding-right:8px}
  .finance-history-select{font-size:12px}
 }
 
 
+
+/* ===== FINANCE MOBILE POLISH / TYPOGRAPHY ===== */
+.fund-detail-sheet{position:relative;}
+.fund-detail-close{position:absolute;top:14px;right:14px;float:none;display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:12px;font-family:Arial,sans-serif;font-size:26px;font-weight:400;line-height:1;color:var(--primary);z-index:3;}
+.fund-detail-title{margin:3px 54px 3px 0;font-family:'Prompt','Noto Sans Thai',sans-serif;font-size:20px;font-weight:700;line-height:1.3;color:var(--ink);}
+.fund-detail-symbol{margin-right:54px;font-size:11.5px;line-height:1.55;color:var(--ink-faint);overflow-wrap:anywhere;}
+.finance-overview-table{font-variant-numeric:tabular-nums;}
+.finance-overview-mobile{display:none;}
+.finance-overview-card{padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:var(--surface);margin-top:8px;}
+.finance-overview-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.finance-overview-card-code{font-family:'Prompt','Noto Sans Thai',sans-serif;font-size:14px;font-weight:700;color:var(--ink);}
+.finance-overview-card-owner{font-size:10.5px;color:var(--ink-faint);margin-top:2px;}
+.finance-overview-card-status{font-size:10px;font-weight:800;white-space:nowrap;}
+.finance-overview-card-status.ok{color:var(--positive);}
+.finance-overview-card-status.wait{color:#C78A2D;}
+.finance-overview-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px;}
+.finance-overview-card-kpi{padding:7px 8px;border-radius:9px;background:#F7FAF9;border:1px solid #E5ECE9;}
+.finance-overview-card-kpi .k{font-size:9.5px;color:var(--ink-faint);}
+.finance-overview-card-kpi .v{font-size:12px;font-weight:800;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.finance-overview-card-kpi .v.positive{color:var(--positive);}
+.finance-overview-card-kpi .v.negative{color:var(--coral);}
+.finance-nav-mobile-list{display:none;}
+.finance-nav-mobile-item{display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line);}
+.finance-nav-mobile-item:last-child{border-bottom:0;}
+.finance-nav-mobile-date{font-size:11.5px;color:var(--ink-soft);}
+.finance-nav-mobile-source{font-size:9.5px;color:var(--ink-faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.finance-nav-mobile-value{font-family:'Prompt','Noto Sans Thai',sans-serif;font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;align-self:center;}
+@media(max-width:650px){
+  .fund-detail-overlay{align-items:flex-end;padding:0;}
+  .fund-detail-sheet{max-height:92vh;border-radius:24px 24px 0 0;padding:58px 12px calc(24px + env(safe-area-inset-bottom));}
+  .fund-detail-close{top:12px;right:12px;width:40px;height:40px;border-radius:12px;font-size:25px;}
+  .fund-detail-title{font-size:18px;margin-right:48px;}
+  .fund-detail-symbol{font-size:11px;margin-right:48px;}
+  .finance-overview-table-wrap{display:none !important;}
+  .finance-overview-mobile{display:block;}
+  .finance-nav-table-wrap{display:none !important;}
+  .finance-nav-mobile-list{display:block;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);}
+  .finance-detail-grid{grid-template-columns:1fr 1fr;}
+}
 
 /* ===== FINAL MOBILE HARDENING ===== */
 html,body{max-width:100%;overflow-x:hidden}
@@ -666,9 +711,9 @@ html,body{max-width:100%;overflow-x:hidden}
   .finance-main-panel{width:100%;max-width:100%;overflow:hidden;padding:10px}
   .finance-main-head{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;}
   .finance-main-brand{width:100%;max-width:100%;min-width:0;}
-  .finance-main-actions{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;width:100% !important;max-width:100% !important;gap:6px !important;min-width:0 !important;}
-  .finance-main-actions .tool-btn{width:100% !important;min-width:0 !important;max-width:100% !important;height:34px;padding:0 6px;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .finance-main-actions .tool-btn:last-child{grid-column:1/-1}
+  .finance-refresh-btn{width:100%;max-width:96px;min-width:0;height:34px;padding:0 8px;font-size:10.5px;align-self:flex-end}
+  .finance-portfolio-actions{width:100%;max-width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:5px;margin-bottom:9px}
+  .finance-portfolio-actions .tool-btn{width:100%;min-width:0;max-width:100%;min-height:36px;padding:0 5px;font-size:10px;}
   .finance-main-tabs{width:100%;max-width:100%;}
   .finance-main-tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .finance-history-card{width:100%;max-width:100%;overflow:hidden;}
@@ -680,7 +725,8 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 @media (max-width:380px), (hover:none) and (pointer:coarse) and (max-width:380px){
   .finance-main-panel{padding:9px}
-  .finance-main-actions .tool-btn{font-size:9.5px;padding:0 4px}
+  .finance-refresh-btn{font-size:9.5px;padding:0 6px}
+  .finance-portfolio-actions .tool-btn{font-size:9.5px;padding:0 4px}
   .finance-history-filter{grid-template-columns:1fr !important;gap:5px !important;}
   .finance-history-filter label{font-size:11px}
 }
@@ -871,15 +917,25 @@ html,body{max-width:100%;overflow-x:hidden}
     <div class="panel finance-main-panel">
       <div class="finance-main-head">
         <div class="finance-main-brand">
-          <div class="finance-main-icon">📈</div>
-          <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">Market Watch • My funds • ETF • Stock</div></div>
+          <div class="finance-main-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 3-4 3 2 5-7"/><path d="M15 6h3v3"/></svg>
+          </div>
+          <div style="min-width:0"><div class="finance-main-title">Finance</div><div class="finance-main-sub">My funds • ETF • Stock</div></div>
         </div>
-        <div class="finance-main-actions"><button class="tool-btn" id="financePortfolioOverviewBtn">📊 ภาพรวมพอร์ต</button><button class="tool-btn" id="financePortfolioHistoryBtn">📈 ประวัติพอร์ต</button><button class="tool-btn" id="financeNavHistoryBtn">📉 NAV History</button><button class="tool-btn" id="financeRealTxBtn">🧾 รายการซื้อจริง</button><button class="tool-btn" id="financeRefreshBtn">↻ อัปเดต</button></div>
+        <button class="tool-btn finance-refresh-btn" id="financeRefreshBtn" type="button" aria-label="อัปเดตข้อมูล">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11"/><path d="M3 5v6h6"/><path d="M4 13a8.1 8.1 0 0 0 14.9 3L21 13"/><path d="M21 19v-6h-6"/></svg><span>อัปเดต</span>
+        </button>
       </div>
       <div class="finance-seg finance-main-tabs" id="financeSeg">
         <button type="button" class="active" data-tab="fund">My funds</button>
         <button type="button" data-tab="etf">ETF</button>
         <button type="button" data-tab="stock">Stock</button>
+      </div>
+      <div class="finance-portfolio-actions" id="financePortfolioActions" hidden>
+        <button class="tool-btn" id="financePortfolioOverviewBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>ภาพรวมพอร์ต</span></button>
+        <button class="tool-btn" id="financePortfolioHistoryBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18V6"/><path d="M4 18h16"/><path d="m7 15 3-4 3 2 4-6"/></svg><span>ประวัติพอร์ต</span></button>
+        <button class="tool-btn" id="financeNavHistoryBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18V6"/><path d="M4 18h16"/><path d="m7 14 3-3 3 2 4-5"/></svg><span>NAV History</span></button>
+        <button class="tool-btn" id="financeRealTxBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v16H4V5a2 2 0 0 1 2-2Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>รายการซื้อจริง</span></button>
       </div>
       <div class="finance-portfolio-summary" id="financePortfolioSummary" hidden></div>
       <div class="finance-summary-note" id="financePortfolioSummaryNote" hidden></div>
@@ -1228,7 +1284,7 @@ html,body{max-width:100%;overflow-x:hidden}
 </div>
 <div class="fund-detail-overlay finance-modal" id="financePortfolioOverviewOverlay" hidden>
   <div class="fund-detail-sheet">
-    <button class="finance-detail-close" id="financePortfolioOverviewClose" type="button">×</button>
+    <button class="fund-detail-close" id="financePortfolioOverviewClose" type="button" aria-label="ปิดภาพรวมพอร์ต">×</button>
     <div class="fund-detail-title">ภาพรวมพอร์ตทุกกองทุน</div>
     <div class="fund-detail-symbol">รวมจากรายการลงทุนจริงที่มีจำนวนหน่วย และ NAV ล่าสุดของแต่ละกองทุน</div>
     <div id="financePortfolioOverviewBody"></div>
@@ -1262,7 +1318,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V68 Portfolio Production Mobile Final';
+const APP_BUILD = 'V69 Mobile Polish Final';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2885,16 +2941,41 @@ function openFinancePortfolioOverview(){
  body.innerHTML=`<div class="finance-portfolio-summary" style="margin-top:8px">${[
    ['เงินลงทุนที่มีหน่วย',fmtBaht(knownInvested),''],['มูลค่าปัจจุบัน',fmtBaht(totalValue),''],['กำไร/ขาดทุน',fmtSignedBaht(totalPnl),totalPnl>0?'positive':totalPnl<0?'negative':''],['ผลตอบแทน',pct==null?'รอข้อมูล':fmtSignedPct(pct),pct==null?'':pct>0?'positive':pct<0?'negative':'']
  ].map(x=>`<div class="finance-summary-card ${x[2]}" style="padding:9px"><div class="k">${x[0]}</div><div class="v">${esc(x[1])}</div></div>`).join('')}</div>
- <div style="overflow:auto"><table class="finance-overview-table"><thead><tr><th>กองทุน / ผู้ถือ</th><th>ลงทุน</th><th>หน่วย</th><th>NAV</th><th>มูลค่า</th><th>P/L</th><th>ผลตอบแทน</th></tr></thead><tbody>${table||'<tr><td colspan="7">ยังไม่มีรายการลงทุน</td></tr>'}</tbody></table></div>
+ <div class="finance-overview-table-wrap" style="overflow:auto"><table class="finance-overview-table"><thead><tr><th>กองทุน / ผู้ถือ</th><th>ลงทุน</th><th>หน่วย</th><th>NAV</th><th>มูลค่า</th><th>P/L</th><th>ผลตอบแทน</th></tr></thead><tbody>${table||'<tr><td colspan="7">ยังไม่มีรายการลงทุน</td></tr>'}</tbody></table></div>
+ <div class="finance-overview-mobile">${rows.map(({item:a,pf})=>{const status=pf.completeUnits?'พร้อมคำนวณ':(pf.hasUnits?'มีบางรายการรอหน่วย':'รอหน่วย');const statusClass=pf.completeUnits?'ok':'wait';return `<div class="finance-overview-card"><div class="finance-overview-card-head"><div><div class="finance-overview-card-code">${esc(a.ticker)}</div><div class="finance-overview-card-owner">${esc(a.owner||'—')}</div></div><div class="finance-overview-card-status ${statusClass}">${esc(status)}</div></div><div class="finance-overview-card-grid"><div class="finance-overview-card-kpi"><div class="k">ลงทุนจริง</div><div class="v">${esc(fmtBaht(pf.investedWithUnits))}</div></div><div class="finance-overview-card-kpi"><div class="k">จำนวนหน่วย</div><div class="v">${esc(fmtUnits(pf.units))}</div></div><div class="finance-overview-card-kpi"><div class="k">NAV ล่าสุด</div><div class="v">${esc(pf.nav>0?moneyNAV(pf.nav):'รอ NAV')}</div></div><div class="finance-overview-card-kpi"><div class="k">มูลค่าปัจจุบัน</div><div class="v">${esc(pf.hasUnits?fmtBaht(pf.value):'รอข้อมูล')}</div></div><div class="finance-overview-card-kpi"><div class="k">P/L</div><div class="v ${pf.hasUnits&&pf.pnl>0?'positive':pf.hasUnits&&pf.pnl<0?'negative':''}">${esc(pf.hasUnits?fmtSignedBaht(pf.pnl):'รอข้อมูล')}</div></div><div class="finance-overview-card-kpi"><div class="k">ผลตอบแทน</div><div class="v ${pf.hasUnits&&pf.pct>0?'positive':pf.hasUnits&&pf.pct<0?'negative':''}">${esc(pf.hasUnits&&pf.investedWithUnits>0?fmtSignedPct(pf.pct):'รอข้อมูล')}</div></div></div></div>`;}).join('')}</div>
  <div class="finance-overview-total"><b>สรุป:</b> ${complete} กองทุนมีหน่วยคำนวณแล้ว • ${pending} กองทุนยังมีรายการรอหน่วย</div>
  <div class="finance-overview-note">เงินลงทุนในตาราง = เงินซื้อจริงจาก Investments ที่มี Units จริง • มูลค่า = Units จริง × NAV ล่าสุด • P/L = มูลค่า − เงินซื้อจริง • PlanMaster/เงินตามแผนไม่รวมในยอดจริง</div>`;
  overlay.hidden=false;
 }
 function closeFinancePortfolioOverview(){document.getElementById('financePortfolioOverviewOverlay')?.setAttribute('hidden','');}
 
-function renderFinanceCards(){const el=document.getElementById('financeCards');if(!el)return;renderFinancePortfolioSummary();renderFinancePortfolioHistory();const list=sortFinanceList(financeListForTab(financeTab));el.innerHTML=list.length?list.map(financeRow).join(''):'<div class="finance-empty">ยังไม่มีรายการ</div>';el.querySelectorAll('.finance-row').forEach(c=>c.addEventListener('click',()=>openFinanceDetail(c.dataset.finance)));
+function renderFinanceCards(){
+ const el=document.getElementById('financeCards'); if(!el)return;
+ const portfolioSummary=document.getElementById('financePortfolioSummary');
+ const portfolioHistory=document.getElementById('financePortfolioHistory');
+ const portfolioActions=document.getElementById('financePortfolioActions');
+ const portfolioControls=['financePortfolioOverviewBtn','financePortfolioHistoryBtn','financeNavHistoryBtn','financeRealTxBtn'].map(id=>document.getElementById(id)).filter(Boolean);
+ const isFundTab=financeTab==='fund';
+ // Portfolio data belongs ONLY to My Funds. ETF/Stock tabs are Market Watch and must never
+ // inherit PlanMaster / Investments / Portfolio History data.
+ if(isFundTab){
+   renderFinancePortfolioSummary();
+   renderFinancePortfolioHistory();
+   if(portfolioActions) portfolioActions.hidden=false;
+   portfolioControls.forEach(b=>b.hidden=false);
+ }else{
+   if(portfolioSummary) portfolioSummary.hidden=true;
+   if(document.getElementById('financePortfolioSummaryNote')) document.getElementById('financePortfolioSummaryNote').hidden=true;
+   if(portfolioHistory) portfolioHistory.hidden=true;
+   if(portfolioActions) portfolioActions.hidden=true;
+   // ETF / Stock are pure Market Watch views. Hide all portfolio-only controls here.
+   portfolioControls.forEach(b=>b.hidden=true);
+ }
+ const list=sortFinanceList(financeListForTab(financeTab));
+ el.innerHTML=list.length?list.map(financeRow).join(''):'<div class="finance-empty">ยังไม่มีรายการ</div>';
+ el.querySelectorAll('.finance-row').forEach(c=>c.addEventListener('click',()=>openFinanceDetail(c.dataset.finance)));
  const hint=document.getElementById('financeHint');
- if(hint)hint.textContent=financeTab==='fund'?'NAV ของ My funds ใช้ NAV จาก FundMaster • เปลี่ยนแปลงเทียบ NAV ก่อนหน้าจาก FundNAV_History':'ราคาจาก Google Sheets / GOOGLEFINANCE • ไม่มีข้อมูล = รออัปเดต';
+ if(hint)hint.textContent=isFundTab?'NAV ของ My funds ใช้ NAV จาก FundMaster • เปลี่ยนแปลงเทียบ NAV ก่อนหน้าจาก FundNAV_History':'ราคาจาก Google Sheets / GOOGLEFINANCE • Market Watch แยกจาก Portfolio และไม่มีเงินลงทุนตามแผน/เงินจริง';
  updateFinanceSortUI();
 }
 function openFinanceRealTransactions(){
@@ -2959,7 +3040,8 @@ function openFinanceNavHistory(){
     const dots=arr.length<=20?arr.map((x,i)=>`<circle class="chart-value-dot" cx="${xx(i)}" cy="${yy(Number(x.nav))}" r="2.5"/>`).join(''):'';
     const labels=[0,Math.floor((arr.length-1)/2),arr.length-1].filter((v,i,a)=>v>=0&&a.indexOf(v)===i).map(i=>{const d=String(arr[i].date).split('-');return `<text x="${xx(i)}" y="${h-8}" text-anchor="middle">${d[2]}/${d[1].slice(0,2)}</text>`;}).join('');
     const chart=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="กราฟ NAV History"><line class="chart-axis" x1="${p.l}" x2="${p.l}" y1="${p.t}" y2="${h-p.b}"/><line class="chart-axis" x1="${p.l}" x2="${w-p.r}" y1="${h-p.b}" y2="${h-p.b}"/><path class="chart-value-line" d="${path}"/>${dots}${labels}</svg>`;
-    document.getElementById('financeNavHistoryContent').innerHTML=`<div class="finance-detail-note"><b>${esc(chosen.code)}</b> • ${arr.length} วัน • แสดง NAV จริง ไม่ใช่ Portfolio Value</div><div class="finance-history-chart">${chart}</div><div style="overflow:auto;max-height:320px"><table class="finance-overview-table"><thead><tr><th>วันที่</th><th>NAV</th><th>แหล่งข้อมูล</th></tr></thead><tbody>${tr}</tbody></table></div>`;
+    const mobileRows=maxRows.map(x=>{const d=String(x.date).split('-').reverse().join('/');return `<div class="finance-nav-mobile-item"><div><div class="finance-nav-mobile-date">${esc(d)}</div><div class="finance-nav-mobile-source">${esc(x.source||'—')}</div></div><div class="finance-nav-mobile-value">${Number(x.nav).toFixed(4)}</div></div>`;}).join('');
+    document.getElementById('financeNavHistoryContent').innerHTML=`<div class="finance-detail-note"><b>${esc(chosen.code)}</b> • ${arr.length} วัน • แสดง NAV จริง ไม่ใช่ Portfolio Value</div><div class="finance-history-chart">${chart}</div><div class="finance-nav-table-wrap" style="overflow:auto;max-height:320px"><table class="finance-overview-table"><thead><tr><th>วันที่</th><th>NAV</th><th>แหล่งข้อมูล</th></tr></thead><tbody>${tr}</tbody></table></div><div class="finance-nav-mobile-list">${mobileRows}</div>`;
   };
   select.addEventListener('change',render); select.value=rows[0].code; render(); overlay.hidden=false;
 }
