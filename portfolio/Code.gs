@@ -58,6 +58,7 @@ function route(action, body) {
     case 'setReportConfig':       return setReportConfig(body);
     case 'installMonthlyTrigger': return installMonthlyTriggerAction();
     case 'sendTestReport':        return sendTestReportAction();
+    case 'checkMonthlyReportSetup': return checkMonthlyReportSetup();
     default: return { ok: false, error: 'Unknown action: ' + action };
   }
 }
@@ -106,12 +107,31 @@ function installMonthlyTriggerAction() {
     return { ok: false, error: 'กรุณาบันทึกอีเมลและ Sheet ID ก่อน' };
   }
   try {
+    SpreadsheetApp.openById(cfgGet('REPORT_SHEET_ID')).getName();
+    if (MailApp.getRemainingDailyQuota() <= 0) throw new Error('โควตาส่งอีเมลของ Google ไม่เหลือแล้ว');
     ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === REPORT_TRIGGER_FN) ScriptApp.deleteTrigger(t); });
     ScriptApp.newTrigger(REPORT_TRIGGER_FN).timeBased().onMonthDay(1).atHour(7).create();
   } catch (err) {
-    return { ok: false, error: 'ยังไม่ได้รับสิทธิ์จัดการ Trigger — ให้เปิด Apps Script editor เลือกฟังก์ชัน installMonthlyTriggerAction แล้วกด Run 1 ครั้งเพื่อ authorize สิทธิ์ก่อน (' + (err && err.message || err) + ')' };
+    return { ok: false, error: 'เปิดส่งอัตโนมัติไม่สำเร็จ: ' + (err && err.message || err) + ' — หากเป็นครั้งแรก ให้รัน authorizeReportPermissions() ใน Apps Script 1 ครั้ง แล้ว Deploy เวอร์ชันใหม่' };
   }
   return { ok: true, message: 'เปิดใช้งานส่งอัตโนมัติแล้ว (วันที่ 1 เวลา 07:00 ตาม Time zone ของ Apps Script)' };
+}
+
+function checkMonthlyReportSetup() {
+  const email = cfgGet('REPORT_EMAIL');
+  const sheetId = cfgGet('REPORT_SHEET_ID');
+  if (!email) return { ok:false, error:'ยังไม่ได้ตั้งค่าอีเมลผู้รับ' };
+  if (!sheetId) return { ok:false, error:'ยังไม่ได้ตั้งค่า Sheet ID' };
+  try {
+    const name = SpreadsheetApp.openById(sheetId).getName();
+    const quota = MailApp.getRemainingDailyQuota();
+    const trigger = hasMonthlyTrigger();
+    if (!trigger) return { ok:false, error:'Google Sheet ใช้งานได้ ('+name+') แต่ยังไม่มี Monthly Trigger' };
+    if (quota <= 0) return { ok:false, error:'Google Sheet ใช้งานได้ แต่โควตาส่งอีเมลวันนี้หมดแล้ว' };
+    return { ok:true, message:'ระบบพร้อม • Sheet: '+name+' • Trigger ทำงานอยู่ • โควตาอีเมลคงเหลือ '+quota+' ฉบับ' };
+  } catch (err) {
+    return { ok:false, error:'ตรวจระบบไม่ผ่าน: '+(err && err.message || err) };
+  }
 }
 
 function sendTestReportAction() {
@@ -134,6 +154,9 @@ function monthlyReportJob() {
 function authorizeReportPermissions() {
   ScriptApp.getProjectTriggers();
   MailApp.getRemainingDailyQuota();
+  const sid = cfgGet('REPORT_SHEET_ID');
+  if (sid) SpreadsheetApp.openById(sid).getName();
+  return { ok:true, message:'สิทธิ์สำหรับ Trigger, Email และ Google Sheet พร้อมใช้งาน' };
 }
 
 function readTab(spreadsheet, tabName) {

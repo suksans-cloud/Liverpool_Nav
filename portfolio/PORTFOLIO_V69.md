@@ -64,3 +64,12 @@ The app never creates a historical holding merely because historical NAV exists.
 - Retirement calculations are self-contained: no automatic Portfolio-value injection. The latest explicitly saved/calculated experiment is stored locally and restored after reload.
 - ETF / Stock tabs clear and hide all My Funds portfolio-only DOM immediately, preventing stale My Funds summary/history from persisting after tab switches.
 - Service-worker cache versions bumped so the fixes can replace the previous mobile build.
+
+
+## V71 fixes — 2026-09-29
+- Retirement hero now matches the main Portfolio hero visual system and removes the explanatory subtitle line.
+- Settings Auto Sync toggle uses a real clickable switch and explicit change handler.
+- Monthly email report adds system check and stronger backend validation for Sheet access, email quota, and trigger installation.
+- Google Drive is explicitly scoped to My Bookshelf; added a Drive API connection test. Google Sheets remains the system database.
+- Home notifications now include pending offline sync, Auto Sync disabled, monthly email setup, and saved retirement experiment.
+- Cache versions bumped.
