@@ -57,3 +57,10 @@ The app never creates a historical holding merely because historical NAV exists.
 - ETF and Stock are Market Watch views only.
 - PlanMaster, Investments, Units, Portfolio Value, P/L, and Portfolio History are not rendered in ETF/Stock tabs.
 - This prevents portfolio data from visually appearing under ETF/Stock.
+
+## V70 fixes — 2026-09-29
+- Removed “Consolidated” from the Portfolio header and aligned the title with the B mark.
+- Finance refresh button stays on the same header row as “Finance” on mobile.
+- Retirement calculations are self-contained: no automatic Portfolio-value injection. The latest explicitly saved/calculated experiment is stored locally and restored after reload.
+- ETF / Stock tabs clear and hide all My Funds portfolio-only DOM immediately, preventing stale My Funds summary/history from persisting after tab switches.
+- Service-worker cache versions bumped so the fixes can replace the previous mobile build.

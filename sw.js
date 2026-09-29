@@ -1,4 +1,4 @@
-const CACHE='mff-shell-v21-final';
+const CACHE='mff-shell-v22-fixes';
 const SHELL=[
   './index.html','./shell.css','./config.js','./data-safety.js',
   './money/index.html','./money/daily.html','./money/monthly.html',
