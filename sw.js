@@ -1,4 +1,4 @@
-const CACHE='mff-shell-v20-final';
+const CACHE='mff-shell-v21-final';
 const SHELL=[
   './index.html','./shell.css','./config.js','./data-safety.js',
   './money/index.html','./money/daily.html','./money/monthly.html',
@@ -13,7 +13,7 @@ self.addEventListener('install',e=>{
     await self.skipWaiting();
   })());
 });
-self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
+self.addEventListener('activate',e=>e.waitUntil((async()=>{const keep=new Set([CACHE]);const keys=await caches.keys();await Promise.all(keys.filter(k=>!keep.has(k)).map(k=>caches.delete(k)));await self.clients.claim();})()));
 self.addEventListener('fetch',e=>{
   const u=new URL(e.request.url);
   if(u.origin!==location.origin || e.request.method!=='GET')return;
