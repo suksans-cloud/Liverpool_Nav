@@ -73,3 +73,11 @@ The app never creates a historical holding merely because historical NAV exists.
 - Google Drive is explicitly scoped to My Bookshelf; added a Drive API connection test. Google Sheets remains the system database.
 - Home notifications now include pending offline sync, Auto Sync disabled, monthly email setup, and saved retirement experiment.
 - Cache versions bumped.
+
+
+## V72 — PlanMaster Display Name Fix
+- Monthly investment table now displays `PlanMaster` column D (`Display Name`) as the authoritative fund name for the selected year.
+- `↻ ดึงจาก Master` / Google Sheets pull reads and stores the PlanMaster display name.
+- Smart Sync/write-back preserves that PlanMaster display name instead of replacing it from `FundMaster`.
+- FundMaster remains the global fund/NAV master; dashboard/Finance fund names are unchanged.
+- Portfolio service-worker cache bumped to `mff-portfolio-v7-v72`.

@@ -1323,7 +1323,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V71 UI Settings Retirement Final';
+const APP_BUILD = 'V72 PlanMaster Display Name Fix';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1508,6 +1508,14 @@ function canonicalFundCode(name){
 function cleanFundDisplayName(name){
   const code=canonicalFundCode(name);
   return FUND_MASTER[code]?.displayName || code;
+}
+// The monthly investment table is PlanMaster-first by design. FundMaster remains
+// the global fund/NAV master, but the name shown in this table follows the
+// Display Name stored on the selected year's PlanMaster row.
+function planDisplayName(f, year=selectedYear){
+  const yd=yearData(f,year,true);
+  const masterName=String(yd.masterDisplayName||'').trim();
+  return masterName || cleanFundDisplayName(f.name);
 }
 
 
@@ -2106,7 +2114,7 @@ function renderFundTableRow(f){
     return `<td><input class="cell-input privacy-number" type="number" step="1" data-fund="${f.id}" data-month="${monthIdx}" value="${val || ''}" placeholder="0"></td>`;
   }).join('');
   return `<tr data-row-fund="${f.id}">
-    <td class="fund-name-cell" data-open-detail="${f.id}">${escapeHtml(cleanFundDisplayName(f.name))}</td>
+    <td class="fund-name-cell" data-open-detail="${f.id}">${escapeHtml(planDisplayName(f,selectedYear))}</td>
     ${cells}
     <td class="actual-cell privacy-number" data-actual="${f.id}">${fmtNum(actual)}</td>
     <td><input class="cell-input target-input privacy-number" type="number" step="1" data-fund="${f.id}" value="${fundTarget(f)}"></td>
@@ -2138,7 +2146,7 @@ function openFundDetail(fundId){
   const yd=yearData(f,selectedYear,true); const vals=MONTHS.map((m,i)=>Number(yd.planMonths?.[i+1])||0);
   const actual=vals.reduce((a,b)=>a+b,0), target=Number(yd.target)||0, pct=target?(actual/target)*100:0;
   document.getElementById('detailOwner').textContent='พอร์ตของ '+f.owner;
-  document.getElementById('detailName').textContent=f.name;
+  document.getElementById('detailName').textContent=planDisplayName(f,selectedYear);
   document.getElementById('detailYear').textContent='ปี '+(selectedYear+543)+' • ข้อมูลลงทุนแยกจากปีอื่น';
   document.getElementById('detailActual').textContent=fmtInt(actual);
   document.getElementById('detailTarget').textContent=fmtInt(target);
@@ -3246,7 +3254,7 @@ function sheetRows(){
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),name=(FUND_MASTER[code]?.displayName||code);const years=Object.keys(f.years||{}).map(Number).filter(Boolean).sort((a,b)=>a-b);const ys=years.length?years:[selectedYear];ys.forEach(y=>{const yd=yearData(f,y,true);const monthVals=MONTHS.map((_,i)=>Number((yd.planMonths||{})[i+1])||0);
     // Q written here is always the sum of the same monthly values (E:P) written on this row,
     // so the sheet can never end up with Q != sum(E:P).
-    const actual=monthVals.reduce((a,b)=>a+b,0);const target=Number(yd.target||f.target)||0;const pct=target?Math.round(actual/target*100):0;plan.push([y,f.owner,code,name,...monthVals,actual,target,pct+'%']);});});
+    const actual=monthVals.reduce((a,b)=>a+b,0);const target=Number(yd.target||f.target)||0;const pct=target?Math.round(actual/target*100):0;plan.push([y,f.owner,code,String(yd.masterDisplayName||name),...monthVals,actual,target,pct+'%']);});});
   allTransactions().forEach(t=>{const code=canonicalFundCode(t.fundName);inv.push([t.id,t.date,t.year,t.month,t.owner,t.fundId,code,FUND_MASTER[code]?.displayName||code,t.amount,t.note||'',Number(t.units)||'',Number(t.purchaseNav)||'']);});
   return{funds,master,plan,inv};
 }
@@ -3304,8 +3312,9 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       prev.actual=prev.months.reduce((a,b)=>a+b,0);
       prev.target=Math.max(Number(prev.target)||0,Number(r[17])||0);
       if(!prev.pct && r[18]!==undefined) prev.pct=String(r[18]??'');
+      if(String(r[3]??'').trim()) prev.displayName=String(r[3]).trim();
     }else{
-      const row={f,y,months:monthVals,actual,target:Number(r[17])||0,pct:String(r[18]??'')};
+      const row={f,y,months:monthVals,actual,target:Number(r[17])||0,pct:String(r[18]??''),displayName:String(r[3]??'').trim()};
       planByIdentity.set(key,row); planRows.push(row);
     }
   });
@@ -3334,10 +3343,11 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
   map.forEach(f=>(f.transactions||[]).forEach(t=>enrichTransactionUnits(t,f.name)));
   // Apply PlanMaster after rebuilding actual transactions. The monthly table is the plan view,
   // while Investments remains the transaction history. PlanMaster therefore wins for monthly cells.
-  planRows.forEach(({f,y,months,actual,target,pct})=>{
+  planRows.forEach(({f,y,months,actual,target,pct,displayName})=>{
     const yd=yearData(f,y,true);
     yd.planMonths={};
     months.forEach((v,i)=>yd.planMonths[i+1]=Number(v)||0);
+    if(displayName) yd.masterDisplayName=displayName;
     // PlanMaster Q/R/S are the authoritative annual actual, target and percentage.
     yd.masterActual=Number(actual)||0;
     yd.masterTarget=Number(target)||0;
