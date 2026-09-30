@@ -287,6 +287,10 @@
   .fund-row-badge.logo-badge svg{width:100%;height:100%;display:block}
   .v39-card-logo.brand-logo{background:#fff;overflow:hidden;padding:0}
   .v39-card-logo.brand-logo svg{width:100%;height:100%;display:block}
+  .finance-badge.brand-logo{background:#fff;overflow:hidden;padding:0;display:grid;place-items:center}
+  .finance-badge.brand-logo svg{width:100%;height:100%;display:block}
+  .ticker-logo{width:22px;height:22px;border-radius:6px;overflow:hidden;display:inline-grid;place-items:center;flex:0 0 auto}
+  .ticker-logo svg{width:100%;height:100%;display:block}
   .fund-row-badge{
     width:28px; height:28px; border-radius:50%; flex:0 0 auto;
     display:flex; align-items:center; justify-content:center;
@@ -1387,7 +1391,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V72 Asset Allocation Retirement Theme Final';
+const APP_BUILD = 'V72 Asset Allocation E-Saving Unified Classification Final';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1956,19 +1960,28 @@ function showToast(msg){
 
 /* ================= RENDER: HERO + DONUT ================= */
 function assetCategoryForFund(f){
-  const code=String(canonicalFundCode(f?.name||'')).trim();
+  const code=String(canonicalFundCode(f?.name||'')).trim().toUpperCase();
+  const owner=String(f?.owner||'').trim().toLowerCase();
   const name=String(f?.name||'');
-  const meta=FUND_MASTER[code]||{};
+  const meta=FUND_MASTER[canonicalFundCode(f?.name||'')]||FUND_MASTER[code]||{};
+  if(owner==='e-saving' || owner==='esaving' || owner==='e saving') {
+    return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'};
+  }
+  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','BND','IDV','QQQ','QQQI']);
+  const BOND_CODES=new Set(['SCBRM1','SCBRM2','SCBSTMFPLUS-I','SCBSTMFPLUS-E','SCBFIXEDA','KKP-INRMF']);
+  const ALT_CODES=new Set(['SCBGOLDHRMF','KKP COREPATH BALANCED RMF']);
+  const EQUITY_CODES=new Set(['SCBRMS&P500','SCBRMWORLD(A)','SCBTM(THAIESGE)','SCBTM(THAIESGA)','TLUS500RMF','TLWORLDXUSRMF','TLWORLD-X','SCBSEMI(E)','SCBVIET(E)','SCBGVALUE(E)','SCBNK225E','SCBS&P500E','GOOGL']);
+  if(ETF_CODES.has(code)) return {key:'etf',label:'ETF',color:'#7B2BE0',note:''};
+  if(BOND_CODES.has(code)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
+  if(ALT_CODES.has(code)) return {key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''};
+  if(EQUITY_CODES.has(code)) return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
   const raw=(String(meta.assetClass||'')+' '+String(meta.officialName||'')+' '+name).toLowerCase();
-  const normalized=raw.replace(/[\-_\/(),.]/g,' ');
-  // E-Saving is always treated as reserve / liquidity, as requested.
-  if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(normalized)) return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving (เงินสำรอง/สภาพคล่อง)'};
+  const normalized=raw.replace(/[\-_\/(,),.]/g,' ');
+  if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(normalized)) return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'};
   if(/\betf\b|exchange traded/.test(normalized)) return {key:'etf',label:'ETF',color:'#7B2BE0',note:''};
-  if(/fixed income|government bond|bond|ตราสารหนี้|พันธบัตร/.test(normalized)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
-  if(/gold|commodity|multi asset|multi-asset|alternative|อสังหาริมทรัพย์|ทอง|สินทรัพย์ทางเลือก/.test(normalized)) return {key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''};
-  // Equity-oriented fund master labels (including RMF / US Equity, Global Equity, Thai ESG, etc.).
+  if(/fixed income|government bond|short term fixed|bond|ตราสารหนี้|พันธบัตร/.test(normalized)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
+  if(/gold|commodity|multi asset|multi-asset|balanced|alternative|อสังหาริมทรัพย์|ทอง|สินทรัพย์ทางเลือก/.test(normalized)) return {key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''};
   if(/equity|stock|หุ้น|thai esg|semiconductor|vietnam|japan|global value|us equity|global ex us/.test(normalized)) return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
-  // Keep the five-category presentation stable for legacy/custom funds when the master has no finer class.
   return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
 }
 function renderHero(){
@@ -2069,12 +2082,27 @@ function renderFilters(){
   });
 }
 function brandKeyForFund(f){
-  const code=canonicalFundCode(f?.name||f?.ticker||'');
-  const meta=FUND_MASTER[code]||{};
+  const rawCode=String(f?.name||f?.ticker||'').trim().toUpperCase();
+  const code=String(canonicalFundCode(rawCode)).trim().toUpperCase();
+  const meta=FUND_MASTER[canonicalFundCode(rawCode)]||FUND_MASTER[code]||{};
   const manager=String(meta.manager||'').toUpperCase();
-  if(code==='VOO'||code==='VXUS'||manager==='VANGUARD') return 'vanguard';
-  if(code==='SCHD'||manager==='SCHWAB') return 'schwab';
-  if(code==='QQQM'||manager==='INVESCO') return 'invesco';
+  const VANGUARD=new Set(['VOO','VXUS','VT','VTI','BND']);
+  const SCHWAB=new Set(['SCHD']);
+  const INVESCO=new Set(['QQQ','QQQM']);
+  const NEOS=new Set(['QQQI']);
+  const SPDR=new Set(['SPY']);
+  const ISHARES=new Set(['IVV','IDV']);
+  if(VANGUARD.has(code)) return 'vanguard';
+  if(SCHWAB.has(code)) return 'schwab';
+  if(INVESCO.has(code)) return 'invesco';
+  if(NEOS.has(code)) return 'neos';
+  if(SPDR.has(code)) return 'spdr';
+  if(ISHARES.has(code)) return 'ishares';
+  if(manager==='VANGUARD') return 'vanguard';
+  if(manager==='SCHWAB') return 'schwab';
+  if(manager==='INVESCO') return 'invesco';
+  if(manager==='STATE STREET'||manager==='SPDR') return 'spdr';
+  if(manager==='BLACKROCK'||manager==='ISHARES') return 'ishares';
   if(manager==='SCBAM'||/^SCB/.test(code)) return 'scb';
   if(manager==='TALIS'||/^TL/.test(code)) return 'talis';
   if(manager==='KKPAM'||/^KKP/.test(code)) return 'kkp';
@@ -2090,6 +2118,9 @@ function brandLogoSvg(key){
     vanguard:`<svg viewBox="0 0 64 64" aria-label="Vanguard"><rect width="64" height="64" rx="14" fill="#c8202f"/><path d="M16 18h8l8 20 8-20h8L35 48h-7z" fill="#fff"/><path d="M20 18h24" stroke="#fff" stroke-width="2" opacity=".9"/></svg>`,
     schwab:`<svg viewBox="0 0 64 64" aria-label="Schwab"><rect width="64" height="64" rx="14" fill="#f3f7f9"/><circle cx="32" cy="32" r="21" fill="#39a9db"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#fff">S</text></svg>`,
     invesco:`<svg viewBox="0 0 64 64" aria-label="Invesco"><rect width="64" height="64" rx="14" fill="#073a78"/><circle cx="32" cy="32" r="17" fill="none" stroke="#fff" stroke-width="3"/><path d="M18 40c7-15 20-20 29-18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="45" cy="22" r="3" fill="#fff"/></svg>`,
+    neos:`<svg viewBox="0 0 64 64" aria-label="NEOS"><rect width="64" height="64" rx="14" fill="#143b66"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">NEOS</text></svg>`,
+    spdr:`<svg viewBox="0 0 64 64" aria-label="SPDR"><rect width="64" height="64" rx="14" fill="#123d73"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#fff">SPDR</text></svg>`,
+    ishares:`<svg viewBox="0 0 64 64" aria-label="iShares"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="37" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#fff">iShares</text></svg>`,
     talis:`<svg viewBox="0 0 64 64" aria-label="TALIS"><rect width="64" height="64" rx="14" fill="#123d5a"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#fff">TALIS</text></svg>`,
     kkp:`<svg viewBox="0 0 64 64" aria-label="KKP"><rect width="64" height="64" rx="14" fill="#005baa"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="900" fill="#fff">KKP</text></svg>`,
     krungsri:`<svg viewBox="0 0 64 64" aria-label="Krungsri"><rect width="64" height="64" rx="14" fill="#f5b400"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">K</text></svg>`,
@@ -2659,7 +2690,7 @@ function mergeDefaultAssets(list){
 function marketInitial(){
  const etfs=document.getElementById('marketEtfGrid');
  const stocks=document.getElementById('marketStockGrid');
- const item=(a,label)=>`<div class="market-ticker-item na privacy-number" data-market="${esc(a.ticker)}"><span class="dot"></span><span class="ticker">${esc(a.ticker)}</span><span class="group">${esc(label)}</span><span class="name">${esc(a.name)}</span><span class="price">—</span><span class="chg">รอข้อมูล</span></div>`;
+ const item=(a,label)=>`<div class="market-ticker-item na privacy-number" data-market="${esc(a.ticker)}"><span class="dot"></span><span class="ticker-logo">${brandLogoSvg(brandKeyForFund(a))}</span><span class="ticker">${esc(a.ticker)}</span><span class="group">${esc(label)}</span><span class="name">${esc(a.name)}</span><span class="price">—</span><span class="chg">รอข้อมูล</span></div>`;
  const etfAssets=MARKET_ASSETS.filter(a=>a.active!==false && isETFAsset(a));
  const stockAssets=MARKET_ASSETS.filter(a=>a.active!==false && !isETFAsset(a) && String(a.exchange||'').toUpperCase()!=='FUND');
  if(etfs) etfs.innerHTML=etfAssets.map(a=>item(a,'ETF')).join('')+etfAssets.map(a=>item(a,'ETF')).join('');
@@ -2846,7 +2877,7 @@ function financeRow(a){
      portfolioMeta=`<div class="finance-row-portfolio muted">ลงทุน ${esc(fmtBaht(pf.invested))} • รอหน่วย</div>`;
    }
  }
- return `<div class="finance-row" data-finance="${esc(a.ticker)}"><div class="finance-row-id"><div class="finance-badge" style="background:${financeBadgeColor(a.ticker)}">${esc(initials)}</div><div class="finance-row-text"><div class="finance-row-symbol">${esc(a.ticker)}</div><div class="finance-row-name">${esc(a.name||'')}</div>${isFundTab&&a.owner?`<div class="finance-row-owner">${esc(a.owner)}</div>`:''}${portfolioMeta}</div></div><div class="finance-row-price ${ok?'':'finance-na'}">${priceText}</div><div class="finance-row-pct ${pctClass}">${pctText}</div></div>`;
+ return `<div class="finance-row" data-finance="${esc(a.ticker)}"><div class="finance-row-id"><div class="finance-badge brand-logo">${brandLogoSvg(brandKeyForFund(a))}</div><div class="finance-row-text"><div class="finance-row-symbol">${esc(a.ticker)}</div><div class="finance-row-name">${esc(a.name||'')}</div>${isFundTab&&a.owner?`<div class="finance-row-owner">${esc(a.owner)}</div>`:''}${portfolioMeta}</div></div><div class="finance-row-price ${ok?'':'finance-na'}">${priceText}</div><div class="finance-row-pct ${pctClass}">${pctText}</div></div>`;
 }
 let financeSort=JSON.parse(localStorage.getItem('finance_sort_v1')||'null')||{key:'default',dir:'asc'};
 const FINANCE_SORT_LABELS={
