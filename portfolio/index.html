@@ -1819,6 +1819,7 @@ function updateLastUpdated(){
   }
   const d=new Date(ts);
   el.textContent='อัปเดตล่าสุด: '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})+' • '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.';
+  el.textContent+=' · v73';
 }
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3599,17 +3600,29 @@ async function pushToSheets(){if(!sheetsToken||!sheetId)return;updateSheetUI('sy
   // rows so a normal portfolio save cannot overwrite a freshly updated NAV with stale local data.
   try{const live=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/FundMaster!A:I`);const lr=live.values||[];const liveByCode={};(lr.slice(1)||[]).forEach(r=>{if(r[0])liveByCode[canonicalFundCode(r[0])]=r;});x.master.slice(1).forEach(r=>{const code=canonicalFundCode(r[0]);const l=liveByCode[code];if(l&&l[5]!==undefined&&l[5]!==''){r[5]=l[5];r[6]=l[6]||r[6];r[7]=l[7]||r[7];}});}catch(e){console.warn('Live NAV merge skipped',e);}
   await clearAndWriteSheet('Funds',x.funds);await clearAndWriteSheet('FundMaster',x.master);await clearAndWriteSheet('PlanMaster',x.plan);await clearAndWriteSheet('Investments',x.inv);localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');}
+// V73: the Sheets API returns cells as DISPLAYED text. A column formatted "#,##0" comes back as
+// "15,000", and Number("15,000") is NaN -> 0. That silently zeroed every amount >= 1,000
+// (Suksan/Wirocha/Phoom showed 0 or only the sub-1,000 rows). Parse displayed numbers safely.
+function sheetNum(v){
+  if(v===undefined||v===null||v==='') return 0;
+  if(typeof v==='number') return isFinite(v)?v:0;
+  let t=String(v).trim(); let neg=false;
+  if(/^\(.*\)$/.test(t)){neg=true;t=t.slice(1,-1);}
+  t=t.replace(/[฿$,\s]/g,'').replace(/%$/,'');
+  const n=parseFloat(t); if(!isFinite(n)) return 0;
+  return neg?-n:n;
+}
 async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Error('not connected');updateSheetUI('syncing');
   try{localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync',localStorage.getItem(STORAGE_KEY)||'');localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync_at',new Date().toISOString());}catch(e){}
   const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=Funds%21A:I&ranges=FundMaster%21A:I&ranges=PlanMaster%21A:V&ranges=Investments%21A:L&ranges=FundNAV_History%21A:H`),v=j.valueRanges||[],fr=v[0]?.values||[],mr=v[1]?.values||[],pr=v[2]?.values||[],ir=v[3]?.values||[],hr=v[4]?.values||[];
   let map=new Map();
   const masterByCode={};
-  (mr.slice(1)||[]).forEach(r=>{if(!r[0])return;masterByCode[r[0]]={displayName:r[1]||r[0],officialName:r[2]||'',manager:r[3]||'',assetClass:r[4]||'',nav:r[5]!==''?Number(r[5]):undefined,date:r[6]||'',source:r[7]||'',active:String(r[8]).toUpperCase()!=='FALSE'};});
+  (mr.slice(1)||[]).forEach(r=>{if(!r[0])return;masterByCode[r[0]]={displayName:r[1]||r[0],officialName:r[2]||'',manager:r[3]||'',assetClass:r[4]||'',nav:(r[5]!==''&&r[5]!==undefined)?sheetNum(r[5]):undefined,date:r[6]||'',source:r[7]||'',active:String(r[8]).toUpperCase()!=='FALSE'};});
   Object.entries(masterByCode).forEach(([code,m])=>{if(m.displayName)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};if(m.nav!==undefined)FUND_NAV[code]={nav:m.nav,date:m.date,source:m.source};});
   setNavHistoryRows((hr.slice(1)||[]));
   try{const reg=JSON.parse(localStorage.getItem('fund_master_web_registry_v1')||'{}');Object.entries(reg||{}).forEach(([code,m])=>{if(code&&!FUND_MASTER[code])FUND_MASTER[code]=m;else if(code&&m?.webAdded)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};});}catch(e){}
-  (fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||r[3]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[7]).toUpperCase()==='TRUE',target:Number(r[8])||0,assetCategoryKey:String(r[9]||'').trim(),years:{},transactions:[]};if(!['reserve','bond','equity','etf','alternative'].includes(f.assetCategoryKey))f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});
-  if(!map.size){(fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[3]).toUpperCase()==='TRUE',target:Number(r[4])||0,assetCategoryKey:'',years:{},transactions:[]};f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});}
+  (fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||r[3]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[7]).toUpperCase()==='TRUE',target:sheetNum(r[8]),assetCategoryKey:String(r[9]||'').trim(),years:{},transactions:[]};if(!['reserve','bond','equity','etf','alternative'].includes(f.assetCategoryKey))f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});
+  if(!map.size){(fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[3]).toUpperCase()==='TRUE',target:sheetNum(r[4]),assetCategoryKey:'',years:{},transactions:[]};f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});}
   // PlanMaster is the editable monthly-plan source of truth. Read it first, then
   // re-apply it AFTER transaction reconstruction so transaction history cannot erase the plan.
   const planRows=[];
@@ -3630,10 +3643,10 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       f.assetCategoryKey=stableAssetCategoryKey(f);
       map.set(f.id,f);
     }
-    const monthVals=Array.from({length:12},(_,i)=>Number(r[4+i])||0);
+    const monthVals=Array.from({length:12},(_,i)=>sheetNum(r[4+i]));
     // PlanMaster Q is the authoritative annual "เงินลงทุนจริง" value.
     // Never replace Q with the E:P monthly-plan sum.
-    const actual = (r[16]!==undefined && r[16]!=='') ? Number(r[16])||0 : monthVals.reduce((a,b)=>a+b,0);
+    const actual = (r[16]!==undefined && r[16]!=='') ? sheetNum(r[16]) : monthVals.reduce((a,b)=>a+b,0);
     const key=owner+'|'+code+'|'+y;
     const prev=planByIdentity.get(key);
     if(prev){
@@ -3642,15 +3655,15 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       // Keep the largest explicit Q instead of recalculating Q from E:P, which can
       // silently turn an actual value such as E-Saving 6,500 into a plan subtotal.
       if(Number(actual)>Number(prev.actual||0)) prev.actual=Number(actual)||0;
-      prev.target=Math.max(Number(prev.target)||0,Number(r[17])||0);
+      prev.target=Math.max(Number(prev.target)||0,sheetNum(r[17]));
       if(!prev.pct && r[18]!==undefined) prev.pct=String(r[18]??'');
       if(String(r[3]??'').trim()) prev.displayName=String(r[3]).trim();
     }else{
-      const row={f,y,months:monthVals,actual,target:Number(r[17])||0,pct:String(r[18]??''),displayName:String(r[3]??'').trim()};
+      const row={f,y,months:monthVals,actual,target:sheetNum(r[17]),pct:String(r[18]??''),displayName:String(r[3]??'').trim()};
       planByIdentity.set(key,row); planRows.push(row);
     }
   });
-  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f)f.transactions.push({id:r[0],date:r[1],year:Number(r[2]),month:Number(r[3]),amount:Number(r[8]??r[7])||0,note:String(r[9]??''),units:Number(r[10])||0,purchaseNav:Number(r[11])||0});});
+  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f)f.transactions.push({id:r[0],date:r[1],year:Number(r[2]),month:Number(r[3]),amount:sheetNum(r[8]??r[7]),note:String(r[9]??''),units:sheetNum(r[10]),purchaseNav:sheetNum(r[11])});});
   // One Portfolio record per Owner + Fund Code. Different owners may still hold the same fund.
   const beforeFundDedupCount=map.size;
   const dedupedRemoteFunds=dedupeFundsByOwnerCode([...map.values()]);
