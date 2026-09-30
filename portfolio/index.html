@@ -1702,9 +1702,9 @@ function normalizeFund(f){
   // Persist the asset bucket on the Portfolio record itself.  The Google Sheet
   // FundMaster can change descriptive metadata; it must never be allowed to
   // silently reclassify an already-known holding after a page refresh.
-  if(!['reserve','bond','equity','etf','alternative'].includes(String(f.assetCategoryKey||''))){
-    f.assetCategoryKey = stableAssetCategoryKey(f);
-  }
+  // Asset classification is deterministic: E-Saving stays one reserve bucket,
+  // while known fund codes (e.g. Wirocha's SCBSTMFPLUS-E) override stale Sheet values.
+  f.assetCategoryKey = stableAssetCategoryKey(f);
   if(!f.years || typeof f.years!=='object') f.years={};
   if(!Array.isArray(f.transactions)) f.transactions=[];
   if(typeof f.favorite!=='boolean') f.favorite=false;
@@ -1966,11 +1966,13 @@ function showToast(msg){
 
 /* ================= RENDER: HERO + DONUT ================= */
 function stableAssetCategoryKey(f){
+  const ownerKey=String(canonicalOwner(f?.owner||'')).trim().toLowerCase();
+  if(/e\s*[- ]?saving|esaving/.test(ownerKey)) return 'reserve';
   const code=String(canonicalFundCode(f?.name||'')).trim().toUpperCase();
   const name=String(f?.name||'').trim();
   const text=(code+' '+name).toLowerCase();
   if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(text)) return 'reserve';
-  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','IDV','QQQ','QQQI','ACWI','GRID']);
+  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','IDV','QQQ','QQQI','IAGG','ACWI','GRID']);
   const BOND_CODES=new Set(['SCBRM1','SCBRM2','SCBSTMFPLUS-I','SCBSTMFPLUS-E','SCBFIXEDA','KKP-INRMF','IUSB','BND']);
   const ALT_CODES=new Set(['SCBGOLDHRMF','KKP COREPATH BALANCED RMF']);
   const EQUITY_CODES=new Set(['SCBRMS&P500','SCBRMWORLD(A)','SCBTM(THAIESGE)','SCBTM(THAIESGA)','TLUS500RMF','TLWORLDXUSRMF','TLWORLD-X','SCBSEMI(E)','SCBVIET(E)','SCBGVALUE(E)','SCBNK225E','SCBS&P500E','GOOGL']);
@@ -1986,8 +1988,12 @@ function stableAssetCategoryKey(f){
   return 'equity';
 }
 function assetCategoryForFund(f){
+  // Owner-level E-Saving is intentionally locked as one reserve bucket.
+  // For individual portfolios, known fund codes take precedence over stale Sheet categories.
+  const stable=stableAssetCategoryKey(f);
+  const ownerKey2=String(canonicalOwner(f?.owner||'')).trim().toLowerCase();
   const persisted=String(f?.assetCategoryKey||'').trim();
-  const key=['reserve','bond','equity','etf','alternative'].includes(persisted) ? persisted : stableAssetCategoryKey(f);
+  const key=(/e\s*[- ]?saving|esaving/.test(ownerKey2)) ? 'reserve' : (stable || (['reserve','bond','equity','etf','alternative'].includes(persisted)?persisted:'equity'));
   const byKey={
     reserve:{key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'},
     bond:{key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''},
@@ -2124,7 +2130,7 @@ function renderFilters(){
   });
 }
 function brandKeyForFund(f){
-  const rawCode=String(f?.name||f?.ticker||'').trim().toUpperCase();
+  const rawCode=String(f?.ticker||f?.name||'').trim().toUpperCase();
   const code=String(canonicalFundCode(rawCode)).trim().toUpperCase();
   const meta=FUND_MASTER[canonicalFundCode(rawCode)]||FUND_MASTER[code]||{};
   const manager=String(meta.manager||'').toUpperCase();
