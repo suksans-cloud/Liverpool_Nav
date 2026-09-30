@@ -1581,6 +1581,12 @@ function canonicalFundCode(name){
   if(FUND_ALIASES[noAmount]) return FUND_ALIASES[noAmount];
   return noAmount;
 }
+// Case-insensitive identity key used only for matching/deduplication.
+// Google Sheets may return the same E-Saving code with different casing
+// (e.g. i-BANK E-saving vs i-BANK E-Saving). Those must be one holding.
+function fundMatchKey(name){
+  return canonicalFundCode(name).trim().replace(/\s+/g,' ').toUpperCase();
+}
 function cleanFundDisplayName(name){
   const code=canonicalFundCode(name);
   return FUND_MASTER[code]?.displayName || code;
@@ -1647,7 +1653,7 @@ function canonicalOwner(owner){
 }
 function fundIdentityKey(f){
   const owner=canonicalOwner(f?.owner||'');
-  const code=canonicalFundCode(f?.name||'');
+  const code=fundMatchKey(f?.name||'');
   if(!owner || !code) return '';
   return owner+'|'+code;
 }
@@ -1819,7 +1825,7 @@ function updateLastUpdated(){
   }
   const d=new Date(ts);
   el.textContent='อัปเดตล่าสุด: '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})+' • '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.';
-  el.textContent+=' · v74';
+  el.textContent+=' · v75';
 }
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1938,9 +1944,15 @@ const fmtNum = n => Math.round(n).toLocaleString('th-TH');
 function fundActual(f){
   const y=Number(selectedYear);
   const yd=yearData(f,y,true);
-  // เงินลงทุนจริงของหน้า Portfolio/Allocation ต้องคำนวณจาก E:P เสมอ
-  // เพื่อให้การแก้รายเดือนสะท้อนทันที และไม่ปล่อยให้ค่า Q เก่าจาก Sheet
-  // มาทับยอดใหม่หลัง Sync. Q เป็นค่าที่แอปคำนวณกลับไปเก็บใน Sheet เท่านั้น.
+  // PlanMaster Q (masterActual) is the single source used by the Overview/
+  // Asset Allocation for "ลงทุนจริง" after a Sheets sync. This keeps the app
+  // aligned with the value already maintained in the Sheet, including E-Saving.
+  if(Object.prototype.hasOwnProperty.call(yd,'masterActual')) return Number(yd.masterActual)||0;
+  // Backward compatibility for local data created before masterActual existed.
+  if(/e\s*[- ]?saving|esaving/.test(String(canonicalOwner(f?.owner||'')).trim().toLowerCase())){
+    const txTotal=(f.transactions||[]).filter(t=>Number(t.year)===y).reduce((s,t)=>s+(Number(t.amount)||0),0);
+    if(txTotal>0) return txTotal;
+  }
   return Object.values(yd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
 }
 function fundPlan(f){
@@ -2378,8 +2390,6 @@ function renderTable(){
       const yd=yearData(f,selectedYear,true);
       yd.planMonths = yd.planMonths || {};
       yd.planMonths[month] = value;
-      yd.masterActual = Object.values(yd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
-      yd.masterPct = yd.masterTarget ? (yd.masterActual/yd.masterTarget*100).toFixed(1)+'%' : '';
       saveData(DATA);
       updateRowComputed(f.id);
       renderHero(); renderAllocation(); renderSmartSummary(); renderFundGroups();
@@ -2477,8 +2487,6 @@ function openFundDetail(fundId){
       const yd2=yearData(f,selectedYear,true);
       yd2.planMonths=yd2.planMonths||{};
       yd2.planMonths[month]=value;
-      yd2.masterActual=Object.values(yd2.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
-      yd2.masterPct=yd2.masterTarget ? (yd2.masterActual/yd2.masterTarget*100).toFixed(1)+'%' : '';
       // Detail page: keep the monthly actual value and transaction history in sync
       // so the summary strip above updates immediately after editing the month.
       syncMonthlyCellToTransactions(f, selectedYear, month, value);
@@ -2921,7 +2929,7 @@ let managerTab=financeTab;
 // added Market Watch tickers, so it always reflects what's actually being invested in.
 function financeFundOwners(code){
  const owners=new Set();
- DATA.funds.forEach(f=>{if(canonicalFundCode(f.name)===code)owners.add(f.owner);});
+ DATA.funds.forEach(f=>{if(fundMatchKey(f.name)===fundMatchKey(code))owners.add(f.owner);});
  return [...owners].join(' / ');
 }
 function financeMyFundsList(){
@@ -3462,7 +3470,7 @@ async function saveNewFundToFundMaster(a){
  await ensureSheetTabs();
  const existing=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/FundMaster!A:I`);
  const vals=existing.values||[];
- const idx=vals.findIndex((r,i)=>i>0 && canonicalFundCode(r[0]||'')===code);
+ const idx=vals.findIndex((r,i)=>i>0 && fundMatchKey(r[0]||'')===fundMatchKey(code));
  const row=fundMasterRowForAsset(a);
  if(idx>0){
    await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/FundMaster!A${idx+1}:I${idx+1}?valueInputOption=USER_ENTERED`,{method:'PUT',body:JSON.stringify({range:`FundMaster!A${idx+1}:I${idx+1}`,majorDimension:'ROWS',values:[row]})});
@@ -3571,8 +3579,7 @@ function sheetRows(){
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),name=(FUND_MASTER[code]?.displayName||code);const years=Object.keys(f.years||{}).map(Number).filter(Boolean).sort((a,b)=>a-b);const ys=years.length?years:[selectedYear];ys.forEach(y=>{const yd=yearData(f,y,true);const monthVals=MONTHS.map((_,i)=>Number((yd.planMonths||{})[i+1])||0);
     // Q is the authoritative "เงินลงทุนจริง" value and must survive a sync.
     // Never overwrite it with the monthly plan sum E:P.
-    // Q = sum of E:P. Never write a stale cached/local Q.
-    const actual=monthVals.reduce((a,b)=>a+b,0);
+    const actual=Object.prototype.hasOwnProperty.call(yd,'masterActual') ? (Number(yd.masterActual)||0) : monthVals.reduce((a,b)=>a+b,0);
     const target=Number(yd.masterTarget ?? yd.target ?? f.target)||0;
     const pct=target?Math.round(actual/target*100):0;
     plan.push([y,f.owner,code,String(yd.masterDisplayName||name),...monthVals,actual,target,pct+'%']);});});
@@ -3599,7 +3606,7 @@ async function pushToSheets(){if(!sheetsToken||!sheetId)return;updateSheetUI('sy
   // rows so a normal portfolio save cannot overwrite a freshly updated NAV with stale local data.
   try{const live=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/FundMaster!A:I`);const lr=live.values||[];const liveByCode={};(lr.slice(1)||[]).forEach(r=>{if(r[0])liveByCode[canonicalFundCode(r[0])]=r;});x.master.slice(1).forEach(r=>{const code=canonicalFundCode(r[0]);const l=liveByCode[code];if(l&&l[5]!==undefined&&l[5]!==''){r[5]=l[5];r[6]=l[6]||r[6];r[7]=l[7]||r[7];}});}catch(e){console.warn('Live NAV merge skipped',e);}
   await clearAndWriteSheet('Funds',x.funds);await clearAndWriteSheet('FundMaster',x.master);await clearAndWriteSheet('PlanMaster',x.plan);await clearAndWriteSheet('Investments',x.inv);localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');}
-// V74: the Sheets API returns cells as DISPLAYED text. A column formatted "#,##0" comes back as
+// V73: the Sheets API returns cells as DISPLAYED text. A column formatted "#,##0" comes back as
 // "15,000", and Number("15,000") is NaN -> 0. That silently zeroed every amount >= 1,000
 // (Suksan/Wirocha/Phoom showed 0 or only the sub-1,000 rows). Parse displayed numbers safely.
 function sheetNum(v){
@@ -3630,8 +3637,9 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     if(!r[0]||!r[2])return; const y=Number(r[0]); if(!y)return;
     const owner=canonicalOwner(r[1]||'');
     const code=canonicalFundCode(r[2]);
-    let f=[...map.values()].find(x=>canonicalFundCode(x.name)===code && canonicalOwner(x.owner)===owner);
-    if(!f) f=[...map.values()].find(x=>canonicalFundCode(x.name)===code && !canonicalOwner(x.owner));
+    const codeKey=fundMatchKey(code);
+    let f=[...map.values()].find(x=>fundMatchKey(x.name)===codeKey && canonicalOwner(x.owner)===owner);
+    if(!f) f=[...map.values()].find(x=>fundMatchKey(x.name)===codeKey && !canonicalOwner(x.owner));
     // IMPORTANT: PlanMaster may contain a valid fund that is not present in the
     // legacy Funds tab. Never drop that row during a pull. Create a portfolio
     // record from PlanMaster so E-Saving and other owner holdings remain complete.
@@ -3643,16 +3651,17 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       map.set(f.id,f);
     }
     const monthVals=Array.from({length:12},(_,i)=>sheetNum(r[4+i]));
-    // Q is a derived annual actual. E:P are the source for the monthly table,
-    // so the app deliberately recalculates Q from E:P and never trusts stale Q.
-    const actual = monthVals.reduce((a,b)=>a+b,0);
-    const key=owner+'|'+code+'|'+y;
+    // PlanMaster Q is the authoritative annual "เงินลงทุนจริง" value.
+    // Never replace Q with the E:P monthly-plan sum.
+    const actual = (r[16]!==undefined && r[16]!=='') ? sheetNum(r[16]) : monthVals.reduce((a,b)=>a+b,0);
+    const key=owner+'|'+fundMatchKey(code)+'|'+y;
     const prev=planByIdentity.get(key);
     if(prev){
       monthVals.forEach((v,i)=>{ if(Number(v)>0 && !(Number(prev.months[i])>0)) prev.months[i]=Number(v); });
       // Duplicate PlanMaster rows are copies of the same Owner+Fund+Year record.
-      // Q is derived, so always derive it again from the merged monthly cells.
-      prev.actual=prev.months.reduce((a,b)=>a+(Number(b)||0),0);
+      // Keep the largest explicit Q instead of recalculating Q from E:P, which can
+      // silently turn an actual value such as E-Saving 6,500 into a plan subtotal.
+      if(Number(actual)>Number(prev.actual||0)) prev.actual=Number(actual)||0;
       prev.target=Math.max(Number(prev.target)||0,sheetNum(r[17]));
       if(!prev.pct && r[18]!==undefined) prev.pct=String(r[18]??'');
       if(String(r[3]??'').trim()) prev.displayName=String(r[3]).trim();
@@ -3691,8 +3700,8 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     yd.planMonths={};
     months.forEach((v,i)=>yd.planMonths[i+1]=Number(v)||0);
     if(displayName) yd.masterDisplayName=displayName;
-    // Q/R/S are derived/summary values. Q is always E:P total.
-    yd.masterActual=months.reduce((a,b)=>a+(Number(b)||0),0);
+    // PlanMaster Q/R/S are the authoritative annual actual, target and percentage.
+    yd.masterActual=Number(actual)||0;
     yd.masterTarget=Number(target)||0;
     yd.masterPct=pct;
     yd.target=Number(target)||0;
@@ -3730,7 +3739,7 @@ async function reconcileTransactionUnitsToSheets(options={}){
   return true;
 }
 
-function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v74] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
+function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v75] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
    เก็บฟังก์ชันไว้เป็น no-op กันโค้ดจุดอื่นที่ยังเรียกอยู่พัง แต่ไม่ทำอะไรจริง
@@ -3930,7 +3939,7 @@ if('serviceWorker' in navigator){
 }
 
 
-/* ================= V74 BOOT SYNC =================
+/* ================= V73 BOOT SYNC =================
    Previously the app only showed whatever was cached in localStorage and never
    re-read the Sheet (auto-pull was disabled and the OAuth token lives in
    sessionStorage), so every page drifted from the Sheet. Now: on load / when the
@@ -3956,7 +3965,7 @@ if('serviceWorker' in navigator){
       }else if(!window.SESSION_PULLED){
         showToast('แสดงข้อมูลที่เก็บในเครื่อง ยังไม่ตรงกับ Sheet — กดซิงค์เพื่อดึงข้อมูลล่าสุด');
       }
-    }catch(e){console.warn('[v74] boot pull failed',e);}
+    }catch(e){console.warn('[v75] boot pull failed',e);}
     finally{busy=false;}
   }
   window.addEventListener('load',()=>setTimeout(bootPull,600));
@@ -3965,7 +3974,7 @@ if('serviceWorker' in navigator){
 
 /* ================= V12 DATA INTEGRITY ================= */
 // Prevent duplicate Portfolio records at creation time as well as during sync.
-window.__MFF_PORTFOLIO_INTEGRITY__='V12';
+window.__MFF_PORTFOLIO_INTEGRITY__='V13';
 window.__MFF_V14_SYNC_AUDIT_READY__=true;
 
 /* ================= INIT ================= */
