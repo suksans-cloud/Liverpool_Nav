@@ -1699,6 +1699,12 @@ function normalizeDuplicateFundsInData(){
 function normalizeFund(f){
   f.owner=canonicalOwner(f.owner);
   f.name=canonicalFundCode(f.name);
+  // Persist the asset bucket on the Portfolio record itself.  The Google Sheet
+  // FundMaster can change descriptive metadata; it must never be allowed to
+  // silently reclassify an already-known holding after a page refresh.
+  if(!['reserve','bond','equity','etf','alternative'].includes(String(f.assetCategoryKey||''))){
+    f.assetCategoryKey = stableAssetCategoryKey(f);
+  }
   if(!f.years || typeof f.years!=='object') f.years={};
   if(!Array.isArray(f.transactions)) f.transactions=[];
   if(typeof f.favorite!=='boolean') f.favorite=false;
@@ -1959,7 +1965,38 @@ function showToast(msg){
 }
 
 /* ================= RENDER: HERO + DONUT ================= */
+function stableAssetCategoryKey(f){
+  const code=String(canonicalFundCode(f?.name||'')).trim().toUpperCase();
+  const name=String(f?.name||'').trim();
+  const text=(code+' '+name).toLowerCase();
+  if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(text)) return 'reserve';
+  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','IDV','QQQ','QQQI','ACWI','GRID']);
+  const BOND_CODES=new Set(['SCBRM1','SCBRM2','SCBSTMFPLUS-I','SCBSTMFPLUS-E','SCBFIXEDA','KKP-INRMF','IUSB','BND']);
+  const ALT_CODES=new Set(['SCBGOLDHRMF','KKP COREPATH BALANCED RMF']);
+  const EQUITY_CODES=new Set(['SCBRMS&P500','SCBRMWORLD(A)','SCBTM(THAIESGE)','SCBTM(THAIESGA)','TLUS500RMF','TLWORLDXUSRMF','TLWORLD-X','SCBSEMI(E)','SCBVIET(E)','SCBGVALUE(E)','SCBNK225E','SCBS&P500E','GOOGL']);
+  if(ETF_CODES.has(code) && !BOND_CODES.has(code)) return 'etf';
+  if(BOND_CODES.has(code)) return 'bond';
+  if(ALT_CODES.has(code)) return 'alternative';
+  if(EQUITY_CODES.has(code)) return 'equity';
+  if(/SCBSTMFPLUS|SCBFIXED|SCBRM[12]$|KKP.*INRMF|\bIUSB\b|\bBND\b/.test(code)) return 'bond';
+  if(/etf|exchange traded/.test(text)) return 'etf';
+  if(/fixed income|government bond|short term fixed|bond|ตราสารหนี้|พันธบัตร/.test(text)) return 'bond';
+  if(/gold|commodity|multi asset|multi-asset|balanced|alternative|อสังหาริมทรัพย์|ทอง|สินทรัพย์ทางเลือก/.test(text)) return 'alternative';
+  if(/equity|stock|หุ้น|thai esg|semiconductor|vietnam|japan|global value|us equity|global ex us/.test(text)) return 'equity';
+  return 'equity';
+}
 function assetCategoryForFund(f){
+  const persisted=String(f?.assetCategoryKey||'').trim();
+  const key=['reserve','bond','equity','etf','alternative'].includes(persisted) ? persisted : stableAssetCategoryKey(f);
+  const byKey={
+    reserve:{key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'},
+    bond:{key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''},
+    equity:{key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''},
+    etf:{key:'etf',label:'ETF',color:'#7B2BE0',note:''},
+    alternative:{key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''}
+  };
+  return byKey[key];
+  /* legacy classifier below intentionally retained as documentation only */
   const code=String(canonicalFundCode(f?.name||'')).trim().toUpperCase();
   const owner=String(f?.owner||'').trim().toLowerCase();
   const name=String(f?.name||'');
@@ -2126,6 +2163,18 @@ function brandKeyForFund(f){
   if(manager==='MORNINGSTAR') return 'morningstar';
   if(meta.assetClass==='ETF') return 'etf';
   return 'fund';
+}
+function marketBrandKey(a){
+  const code=String(a?.ticker||a?.name||'').trim().toUpperCase();
+  const direct={
+    'SPY':'spdr','IVV':'ishares','IDV':'ishares','IAGG':'ishares','ACWI':'ishares','IUSB':'ishares',
+    'VOO':'vanguard','VXUS':'vanguard','VT':'vanguard','VTI':'vanguard','BND':'vanguard',
+    'SCHD':'schwab','QQQ':'invesco','QQQM':'invesco','QQQI':'neos','GRID':'globalx',
+    'AAPL':'apple','AMD':'amd','AMZN':'amazon','ASML':'asml','ASTS':'asts','AVGO':'broadcom',
+    'MSFT':'microsoft','NVDA':'nvidia','GOOGL':'google','META':'meta','TSLA':'tesla','JPM':'jpmorgan',
+    'MU':'micron','NBIS':'nebius','CPALL':'cpall','BBL':'bbl','AAOI':'aaoi'
+  };
+  return direct[code] || brandKeyForFund(a);
 }
 function brandLogoSvg(key){
   const logos={
@@ -2723,7 +2772,7 @@ function mergeDefaultAssets(list){
 function marketInitial(){
  const etfs=document.getElementById('marketEtfGrid');
  const stocks=document.getElementById('marketStockGrid');
- const item=(a,label)=>`<div class="market-ticker-item na privacy-number" data-market="${esc(a.ticker)}"><span class="dot"></span><span class="ticker-logo">${brandLogoSvg(brandKeyForFund(a))}</span><span class="ticker">${esc(a.ticker)}</span><span class="group">${esc(label)}</span><span class="name">${esc(a.name)}</span><span class="price">—</span><span class="chg">รอข้อมูล</span></div>`;
+ const item=(a,label)=>`<div class="market-ticker-item na privacy-number" data-market="${esc(a.ticker)}"><span class="dot"></span><span class="ticker-logo">${brandLogoSvg(marketBrandKey(a))}</span><span class="ticker">${esc(a.ticker)}</span><span class="group">${esc(label)}</span><span class="name">${esc(a.name)}</span><span class="price">—</span><span class="chg">รอข้อมูล</span></div>`;
  const etfAssets=MARKET_ASSETS.filter(a=>a.active!==false && isETFAsset(a));
  const stockAssets=MARKET_ASSETS.filter(a=>a.active!==false && !isETFAsset(a) && String(a.exchange||'').toUpperCase()!=='FUND');
  if(etfs) etfs.innerHTML=etfAssets.map(a=>item(a,'ETF')).join('')+etfAssets.map(a=>item(a,'ETF')).join('');
@@ -3447,12 +3496,12 @@ async function clearAndWriteSheet(title,values){await sheetsApi(`https://sheets.
 function sheetRows(){
   normalizeDuplicateFundsInData();
   localStorage.setItem(STORAGE_KEY,JSON.stringify(DATA));
-  const funds=[['ID','Owner','Fund Code','Display Name','Official Fund Name','Manager','Asset Class','Favorite','Target/Year']],
+  const funds=[['ID','Owner','Fund Code','Display Name','Official Fund Name','Manager','Asset Class','Favorite','Target/Year','Asset Category']],
         master=[['Fund Code','Display Name','Official Fund Name','Manager','Asset Class','NAV','NAV Date','NAV Source','Active']],
         plan=[['Year','Owner','Fund Code','Display Name',...MONTHS,'เงินลงทุนจริง','เป้าหมาย/ปี','% ของเป้าหมาย']],
         inv=[['Transaction ID','Date','Year','Month','Owner','Fund ID','Fund Code','Fund Name','Amount','Note','Units','Purchase NAV']];
   Object.entries(FUND_MASTER).forEach(([code,m])=>{const n=FUND_NAV[code]||{};master.push([code,m.displayName,m.officialName||'',m.manager||'',m.assetClass||'',n.nav??'',n.date??'',n.source??'', 'TRUE']);});
-  DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),m=FUND_MASTER[code]||{};funds.push([f.id,f.owner,code,m.displayName||code,m.officialName||'',m.manager||'',m.assetClass||'',f.favorite?'TRUE':'FALSE',fundTarget(f)]);});
+  DATA.funds.forEach(f=>{normalizeFund(f);const code=canonicalFundCode(f.name),m=FUND_MASTER[code]||{};funds.push([f.id,f.owner,code,m.displayName||code,m.officialName||'',m.manager||'',m.assetClass||'',f.favorite?'TRUE':'FALSE',fundTarget(f),f.assetCategoryKey]);});
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),name=(FUND_MASTER[code]?.displayName||code);const years=Object.keys(f.years||{}).map(Number).filter(Boolean).sort((a,b)=>a-b);const ys=years.length?years:[selectedYear];ys.forEach(y=>{const yd=yearData(f,y,true);const monthVals=MONTHS.map((_,i)=>Number((yd.planMonths||{})[i+1])||0);
     // Q written here is always the sum of the same monthly values (E:P) written on this row,
     // so the sheet can never end up with Q != sum(E:P).
@@ -3489,8 +3538,8 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
   Object.entries(masterByCode).forEach(([code,m])=>{if(m.displayName)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};if(m.nav!==undefined)FUND_NAV[code]={nav:m.nav,date:m.date,source:m.source};});
   setNavHistoryRows((hr.slice(1)||[]));
   try{const reg=JSON.parse(localStorage.getItem('fund_master_web_registry_v1')||'{}');Object.entries(reg||{}).forEach(([code,m])=>{if(code&&!FUND_MASTER[code])FUND_MASTER[code]=m;else if(code&&m?.webAdded)FUND_MASTER[code]={...(FUND_MASTER[code]||{}),...m};});}catch(e){}
-  (fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||r[3]||'');map.set(r[0],{id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[7]).toUpperCase()==='TRUE',target:Number(r[8])||0,years:{},transactions:[]});});
-  if(!map.size){(fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||'');map.set(r[0],{id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[3]).toUpperCase()==='TRUE',target:Number(r[4])||0,years:{},transactions:[]});});}
+  (fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||r[3]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[7]).toUpperCase()==='TRUE',target:Number(r[8])||0,assetCategoryKey:String(r[9]||'').trim(),years:{},transactions:[]};if(!['reserve','bond','equity','etf','alternative'].includes(f.assetCategoryKey))f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});
+  if(!map.size){(fr.slice(1)||[]).forEach(r=>{if(!r[0])return;const code=canonicalFundCode(r[2]||'');const f={id:r[0],owner:canonicalOwner(r[1]||''),name:code,favorite:String(r[3]).toUpperCase()==='TRUE',target:Number(r[4])||0,assetCategoryKey:'',years:{},transactions:[]};f.assetCategoryKey=stableAssetCategoryKey(f);map.set(r[0],f);});}
   // PlanMaster is the editable monthly-plan source of truth. Read it first, then
   // re-apply it AFTER transaction reconstruction so transaction history cannot erase the plan.
   const planRows=[];
