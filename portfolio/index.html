@@ -113,6 +113,68 @@
   main{padding:6px 18px 20px;}
   section[hidden]{display:none !important;}
 
+  /* ---------- V72 Asset Allocation replacement ---------- */
+  .asset-allocation-panel{overflow:hidden;padding:0;background:radial-gradient(120% 140% at 15% 0%, #3A6C93 0%, var(--primary) 46%, #072340 100%);color:#fff;box-shadow:var(--shadow-hero);position:relative;}
+  .asset-allocation-panel::after{content:"";position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.14),rgba(255,255,255,0) 70%);pointer-events:none;}
+  .asset-allocation-panel > *{position:relative;z-index:1;}
+  .asset-allocation-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:18px 18px 10px;}
+  .asset-allocation-heading{min-width:0;}
+  .asset-allocation-head .panel-title{margin:0;font-size:19px;font-weight:900;color:#fff;}
+  .asset-allocation-sub{font-size:12px;color:rgba(255,255,255,.78);margin-top:3px;}
+  .asset-total-box{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.16);border-radius:15px;padding:9px 14px;text-align:right;min-width:145px;color:rgba(255,255,255,.72);font-size:10px;font-weight:700;}
+  .asset-total-box strong{display:block;color:#fff;font-size:21px;line-height:1.15;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .asset-allocation-body{display:grid;grid-template-columns:39% minmax(0,1fr);gap:14px;padding:7px 18px 18px;align-items:center;}
+  .asset-donut-wrap{display:grid;place-items:center;min-height:245px;}
+  .asset-donut{width:220px;height:220px;border-radius:50%;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.025);}
+  .asset-donut::after{content:"";position:absolute;inset:40px;background:rgba(7,35,64,.96);border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
+  .asset-donut-center{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;pointer-events:none;}
+  .asset-donut-center strong{display:block;color:#fff;font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;}
+  .asset-donut-center span{display:block;color:rgba(255,255,255,.82);font-size:11px;font-weight:600;margin-top:2px;line-height:1.2;}
+  .asset-donut-label{position:absolute;z-index:3;transform:translate(-50%,-50%);color:#fff;font-size:12px;font-weight:900;line-height:1;letter-spacing:-.15px;text-shadow:0 1px 2px rgba(0,0,0,.24);white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums;}
+  .asset-legend{border:0;border-radius:0;padding:0;background:transparent;}
+  .asset-legend-item{display:grid;grid-template-columns:14px minmax(0,1fr) auto auto;gap:9px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.16);}
+  .asset-legend-item:last-child{border-bottom:0;}
+  .asset-legend-dot{width:13px;height:13px;border-radius:4px;}
+  .asset-legend-name{font-size:13px;font-weight:850;color:#fff;min-width:0;}
+  .asset-legend-name small{display:block;margin-top:3px;color:#D7FFF4;background:rgba(53,169,142,.22);border-radius:999px;width:max-content;max-width:100%;padding:3px 7px;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .asset-legend-money{font-size:13px;font-weight:850;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .asset-legend-pct{font-size:13px;font-weight:850;color:#fff;min-width:48px;text-align:right;font-variant-numeric:tabular-nums;}
+  .asset-empty{padding:24px 8px;text-align:center;color:rgba(255,255,255,.75);font-size:12px;}
+  @media(max-width:650px){
+    /* Compact mobile layout: donut + detail legend share one row. */
+    .asset-allocation-head{padding:13px 12px 7px;gap:7px;align-items:center;}
+    .asset-allocation-head .panel-title{font-size:15.5px;line-height:1.28;}
+    .asset-allocation-sub{font-size:9px;line-height:1.3;}
+    .asset-total-box{min-width:104px;padding:7px 8px;font-size:8.5px;border-radius:12px;}
+    .asset-total-box strong{font-size:17px;}
+    .asset-allocation-body{grid-template-columns:37% minmax(0,1fr);padding:4px 10px 10px;gap:16px;align-items:center;}
+    .asset-donut-wrap{min-height:150px;}
+    .asset-donut{width:124px;height:124px;transform:translateX(-5px);}
+    .asset-donut::after{inset:24px;}
+    .asset-donut-center strong{font-size:14px;}
+    .asset-donut-center span{font-size:8px;}
+    .asset-donut-label{font-size:8.5px;letter-spacing:-.2px;}
+    .asset-legend{padding:0;border-radius:0;}
+    .asset-legend-item{padding:6px 0;gap:5px;grid-template-columns:10px minmax(0,1fr) auto auto;}
+    .asset-legend-dot{width:10px;height:10px;border-radius:3px;}
+    .asset-legend-name,.asset-legend-money,.asset-legend-pct{font-size:9.5px;}
+    .asset-legend-name{line-height:1.15;}
+    .asset-legend-money,.asset-legend-pct{font-weight:850;}
+    .asset-legend-pct{min-width:32px;}
+    .asset-legend-name small{font-size:7px;margin-top:2px;padding:2px 4px;max-width:100px;}
+  }
+  @media(max-width:370px){
+    .asset-allocation-body{grid-template-columns:36% minmax(0,1fr);gap:14px;padding-left:7px;padding-right:7px;}
+    .asset-donut{width:114px;height:114px;transform:translateX(-5px);}
+    .asset-donut::after{inset:22px;}
+    .asset-donut-center strong{font-size:13px;}
+    .asset-donut-center span{font-size:7.5px;}
+    .asset-donut-label{font-size:8px;}
+    .asset-legend-item{padding:5px 0;}
+    .asset-legend-name,.asset-legend-money,.asset-legend-pct{font-size:8.5px;}
+    .asset-legend-pct{min-width:30px;}
+  }
+
   /* ---------- hero ---------- */
   .hero{
     background:radial-gradient(120% 140% at 15% 0%, #3A6C93 0%, var(--primary) 46%, #072340 100%);
@@ -166,6 +228,14 @@
     padding:18px; margin-top:16px; box-shadow:0 2px 14px -8px rgba(34,28,53,.14);
   }
   .panel-title{font-size:14.5px; font-weight:600; margin:0 0 14px;}
+  /* V72 FINAL: Asset Allocation uses the same full dark-blue Retirement theme.
+     Keep this rule after the generic .panel rule so the panel background cannot be overwritten. */
+  .panel.asset-allocation-panel{
+    background:radial-gradient(120% 140% at 15% 0%, #3A6C93 0%, var(--primary) 46%, #072340 100%) !important;
+    color:#fff;
+    box-shadow:var(--shadow-hero);
+  }
+  .panel.asset-allocation-panel .panel-title{color:#fff;}
   .alloc-row{ display:flex; align-items:flex-start; gap:18px; }
   .donut{ width:104px; height:104px; border-radius:50%; flex:none; position:relative;
     box-shadow:0 10px 24px -12px rgba(15,91,77,.28);}
@@ -710,6 +780,7 @@ html,body{max-width:100%;overflow-x:hidden}
 @media (max-width:900px), (hover:none) and (pointer:coarse){
   main{padding-left:10px;padding-right:10px}
   .panel{max-width:100%;}
+  .panel.asset-allocation-panel{background:radial-gradient(120% 140% at 15% 0%, #3A6C93 0%, var(--primary) 46%, #072340 100%) !important;color:#fff;}
   .finance-main-panel{width:100%;max-width:100%;overflow:hidden;padding:10px}
   .finance-main-head{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;width:100%;}
   .finance-main-brand{width:auto;max-width:100%;min-width:0;flex:1;}
@@ -778,8 +849,8 @@ html,body{max-width:100%;overflow-x:hidden}
   .ret-sub{font-size:12.5px;line-height:1.55;color:rgba(255,255,255,.82);margin:7px 0 0;max-width:330px;}
   .ret-hero-stat{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
   .ret-stat{flex:1;min-width:96px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:9px 12px;position:relative;overflow:hidden;}
-  .ret-stat .k{font-size:11px;color:rgba(255,255,255,.7);}
-  .ret-stat .v{font-size:16px;font-weight:700;margin-top:2px;}
+  .ret-stat .k{font-size:11px;line-height:1.45;color:rgba(255,255,255,.7);min-height:32px;display:flex;align-items:flex-start;}
+  .ret-stat .v{font-size:16px;line-height:1.2;font-weight:700;margin-top:2px;}
   .ret-stat:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;}
   .ret-stat:nth-child(1):before{background:var(--gold);}.ret-stat:nth-child(2):before{background:var(--mint);}.ret-stat:nth-child(3):before{background:var(--coral);}
   .ret-tabs{
@@ -857,27 +928,25 @@ html,body{max-width:100%;overflow-x:hidden}
 <main>
   <!-- ============ DASHBOARD ============ -->
   <section id="view-dashboard">
-    <div class="hero">
-      <div class="hero-top">
-        <div>
-          <p class="hero-label">เงินลงทุนสะสมทุกกองทุน</p>
-          <p class="hero-amount num privacy-number" id="heroActual">฿0</p>
-          <p class="hero-target">จากเป้าหมาย <b class="privacy-number" id="heroTarget">฿0</b> ต่อปี</p>
+    <!-- V72: only the old blue summary box is replaced by Asset Allocation. -->
+    <div class="panel asset-allocation-panel" id="assetAllocationPanel">
+      <div class="asset-allocation-head">
+        <div class="asset-allocation-heading">
+          <div class="panel-title" id="assetAllocationTitle">สัดส่วนเงินลงทุนตามประเภทสินทรัพย์</div>
+          <div class="asset-allocation-sub">คำนวณจาก “มูลค่าการลงทุนจริง” ของพอร์ต (ไม่ใช่ตามแผน)</div>
         </div>
-        <div class="gauge">
-          <svg viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="10"/>
-            <circle id="gaugeArc" cx="50" cy="50" r="42" fill="none" stroke="#fff" stroke-width="10"
-              stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
-          </svg>
-          <div class="gauge-pct" id="gaugePct">0%</div>
+        <div class="asset-total-box">
+          <div>มูลค่าการลงทุนรวม</div>
+          <strong id="assetAllocationTotal">฿0</strong>
         </div>
       </div>
-      <div class="hero-bottom">
-        <div class="hero-chip"><div class="k">จำนวนกองทุน</div><div class="v privacy-number" id="heroFundCount">0</div></div>
-        <div class="hero-chip"><div class="k">ครบเป้าหมายแล้ว</div><div class="v privacy-number" id="heroMetCount">0</div></div>
-        <div class="hero-chip"><div class="k">คงเหลือถึงเป้าหมาย</div><div class="v privacy-number" id="heroRemain">฿0</div></div>
-        <div class="hero-chip"><div class="k">สำเร็จแล้ว</div><div class="v privacy-number" id="heroPctChip">0%</div></div>
+      <div class="asset-allocation-body">
+        <div class="asset-donut-wrap">
+          <div class="asset-donut" id="assetAllocationDonut">
+            <div class="asset-donut-center"><strong id="assetAllocationCenter">฿0</strong><span>รวมเงินลงทุน</span></div>
+          </div>
+        </div>
+        <div class="asset-legend" id="assetAllocationLegend"></div>
       </div>
     </div>
 
@@ -902,14 +971,6 @@ html,body{max-width:100%;overflow-x:hidden}
     </div>
 
     <div class="filters" id="ownerFilters"></div>
-    <div class="smart-tools">
-      <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input id="fundSearch" type="search" placeholder="ค้นหากองทุน / เจ้าของพอร์ต..." autocomplete="off">
-        <button class="search-clear" id="searchClear">×</button>
-      </div>
-      <button class="tool-btn" id="favoritesOnlyBtn">★ รายการโปรด</button>
-    </div>
     <div class="summary-grid" id="smartSummary"></div>
     <div class="notice-list" id="smartNotices"></div>
 
@@ -1252,7 +1313,6 @@ html,body{max-width:100%;overflow-x:hidden}
     <div class="quick-month" id="detailMonthlyPlan"></div>
     <div class="detail-actions">
       <button class="detail-action-btn" id="detailInvestBtn">＋ บันทึกการลงทุน</button>
-      <button class="detail-action-btn" id="detailFavoriteBtn">☆ เพิ่มรายการโปรด</button>
     </div>
     <div class="detail-chart-card">
       <div class="detail-chart-title">รายละเอียดแต่ละเดือน <span class="chart-unit">พิมพ์ตัวเลขแก้ไขได้ทันที</span></div>
@@ -1323,7 +1383,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V72 PlanMaster Display Name Fix';
+const APP_BUILD = 'V72 Asset Allocation Retirement Theme Final';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1746,7 +1806,7 @@ function saveData(data){
 }
 let DATA = loadData();
 updateLastUpdated();
-let currentOwnerFilter = 'ALL'; window.favoritesOnly=false;
+let currentOwnerFilter = 'ALL';
 
 /* ================= HELPERS ================= */
 
@@ -1784,8 +1844,7 @@ function annualActualTotal(){
   return scopedFunds().reduce((s,f)=>s+fundActual(f),0);
 }
 function filteredFunds(){
-  const q=(document.getElementById('fundSearch')?.value||'').trim().toLowerCase();
-  return DATA.funds.filter(f=>(currentOwnerFilter==='ALL'||f.owner===currentOwnerFilter)&&(!q||f.name.toLowerCase().includes(q)||f.owner.toLowerCase().includes(q))&&(!window.favoritesOnly||f.favorite));
+  return DATA.funds.filter(f=>currentOwnerFilter==='ALL'||f.owner===currentOwnerFilter);
 }
 function renderSmartSummary(){
   const funds=scopedFunds();
@@ -1892,23 +1951,70 @@ function showToast(msg){
 }
 
 /* ================= RENDER: HERO + DONUT ================= */
+function assetCategoryForFund(f){
+  const code=String(canonicalFundCode(f?.name||'')).trim();
+  const name=String(f?.name||'');
+  const meta=FUND_MASTER[code]||{};
+  const raw=(String(meta.assetClass||'')+' '+String(meta.officialName||'')+' '+name).toLowerCase();
+  const normalized=raw.replace(/[\-_\/(),.]/g,' ');
+  // E-Saving is always treated as reserve / liquidity, as requested.
+  if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(normalized)) return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving (เงินสำรอง/สภาพคล่อง)'};
+  if(/\betf\b|exchange traded/.test(normalized)) return {key:'etf',label:'ETF',color:'#7B2BE0',note:''};
+  if(/fixed income|government bond|bond|ตราสารหนี้|พันธบัตร/.test(normalized)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
+  if(/gold|commodity|multi asset|multi-asset|alternative|อสังหาริมทรัพย์|ทอง|สินทรัพย์ทางเลือก/.test(normalized)) return {key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''};
+  // Equity-oriented fund master labels (including RMF / US Equity, Global Equity, Thai ESG, etc.).
+  if(/equity|stock|หุ้น|thai esg|semiconductor|vietnam|japan|global value|us equity|global ex us/.test(normalized)) return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
+  // Keep the five-category presentation stable for legacy/custom funds when the master has no finer class.
+  return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
+}
 function renderHero(){
-  const funds = scopedFunds();
-  const totalActual = funds.reduce((a,f)=>a+fundActual(f),0);
-  const totalTarget = funds.reduce((a,f)=>a+fundTarget(f),0);
-  const pct = totalTarget ? Math.min(100, (totalActual/totalTarget)*100) : 0;
-  document.getElementById('heroActual').textContent = fmtInt(totalActual);
-  document.getElementById('heroTarget').textContent = fmtInt(totalTarget);
-  document.getElementById('heroFundCount').textContent = funds.length;
-  document.getElementById('heroMetCount').textContent = funds.filter(f=>fundActual(f)>=fundTarget(f) && fundTarget(f)>0).length;
-  document.getElementById('heroRemain').textContent = fmtInt(Math.max(0,totalTarget-totalActual));
-  document.getElementById('heroPctChip').textContent = Math.round(pct)+'%';
-  const circumference = 2*Math.PI*42;
-  const arc = document.getElementById('gaugeArc');
-  arc.setAttribute('stroke-dasharray', circumference.toFixed(1));
-  arc.setAttribute('stroke-dashoffset', (circumference*(1-pct/100)).toFixed(1));
-  arc.setAttribute('stroke', pct>=100 ? '#F2D94E' : pct>=66 ? '#8FE3D0' : pct>=33 ? '#FFD37A' : '#FF9FAE');
-  document.getElementById('gaugePct').textContent = Math.round(pct)+'%';
+  const funds=scopedFunds();
+  const totals={};
+  funds.forEach(f=>{
+    const amount=Number(fundActual(f))||0;
+    if(amount<=0) return;
+    const c=assetCategoryForFund(f);
+    if(!totals[c.key]) totals[c.key]={label:c.label,color:c.color,note:c.note,amount:0};
+    totals[c.key].amount+=amount;
+  });
+  const order=['reserve','bond','equity','etf','alternative'];
+  const entries=order.filter(k=>totals[k]).map(k=>totals[k]);
+  const total=entries.reduce((sum,x)=>sum+x.amount,0);
+  const totalForPct=total||1;
+  document.getElementById('assetAllocationTitle').textContent = currentOwnerFilter==='ALL'
+    ? 'สัดส่วนเงินลงทุนตามประเภทสินทรัพย์'
+    : 'สัดส่วนเงินลงทุนของ '+currentOwnerFilter;
+  document.getElementById('assetAllocationTotal').textContent=fmtInt(total);
+  document.getElementById('assetAllocationCenter').textContent=fmtInt(total);
+  let acc=0;
+  const stops=entries.map(x=>{const start=acc/totalForPct*360;acc+=x.amount;const end=acc/totalForPct*360;return `${x.color} ${start}deg ${end}deg`;});
+  const donut=document.getElementById('assetAllocationDonut');
+  donut.style.background=stops.length?`conic-gradient(${stops.join(',')})`:'var(--primary-soft)';
+  // Show each category's percentage directly on its donut slice.
+  donut.querySelectorAll('.asset-donut-label').forEach(el=>el.remove());
+  if(total){
+    let labelAcc=0;
+    entries.forEach(x=>{
+      const pct=(x.amount/total)*100;
+      const mid=(labelAcc + (pct/100*360)/2);
+      labelAcc += (pct/100*360);
+      const rad=mid*Math.PI/180;
+      // Position labels on the middle of each colored slice.
+      const xPos=50 + Math.sin(rad)*38;
+      const yPos=50 - Math.cos(rad)*38;
+      const label=document.createElement('div');
+      label.className='asset-donut-label';
+      label.style.left=xPos+'%';
+      label.style.top=yPos+'%';
+      label.textContent=pct.toFixed(1)+'%';
+      donut.appendChild(label);
+    });
+  }
+  const legend=document.getElementById('assetAllocationLegend');
+  legend.innerHTML=entries.map(x=>{
+    const pct=total?((x.amount/total)*100):0;
+    return `<div class="asset-legend-item">\n      <div class="asset-legend-dot" style="background:${x.color}"></div>\n      <div class="asset-legend-name">${escapeHtml(x.label)}${x.note?`<small>${escapeHtml(x.note)}</small>`:''}</div>\n      <div class="asset-legend-money">${fmtInt(x.amount)}</div>\n      <div class="asset-legend-pct">${pct.toFixed(1)}%</div>\n    </div>`;
+  }).join('') || '<div class="asset-empty">ยังไม่มีข้อมูลการลงทุนจริง</div>';
 }
 function renderAllocation(){
   const totals = ownerTotals();
@@ -1948,7 +2054,7 @@ function renderFilters(){
   const wrap = document.getElementById('ownerFilters');
   const list = ['ALL', ...owners()];
   wrap.innerHTML = list.map(o=>{
-    const label = o==='ALL' ? 'ทั้งหมด' : o;
+    const label = o==='ALL' ? 'ภาพรวม' : o;
     return `<button class="pill ${currentOwnerFilter===o?'active':''}" data-owner="${o}">${label}</button>`;
   }).join('');
   wrap.querySelectorAll('.pill').forEach(btn=>{
@@ -1984,7 +2090,6 @@ function renderFundGroups(){
         <div class="fund-row-body">
           <div class="fund-row-line1">
             <span class="fund-row-name">${escapeHtml(cleanFundDisplayName(f.name))}</span>
-            <button class="favorite-btn ${f.favorite?'active':''}" data-fav="${f.id}">${f.favorite?'★':'☆'}</button>
           </div>
           <div class="fund-row-nav">${escapeHtml(navText)}</div>
           <div class="fund-bar-track"><div class="fund-bar-fill ${band}" style="width:${pct}%"></div></div>
@@ -2014,7 +2119,6 @@ function renderFundGroups(){
       </div>`;
   }).join('');
 
-  wrap.querySelectorAll('[data-fav]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();const f=DATA.funds.find(x=>x.id===btn.dataset.fav);if(f){f.favorite=!f.favorite;saveData(DATA);renderDashboard();showToast(f.favorite?'เพิ่มรายการโปรดแล้ว':'นำออกจากรายการโปรดแล้ว');}}));
   wrap.querySelectorAll('.add-fund-link').forEach(btn=>{
     btn.addEventListener('click', ()=> openAddFundModal(btn.dataset.owner));
   });
@@ -2031,11 +2135,7 @@ function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-document.getElementById('fundSearch').addEventListener('input',renderFundGroups);
-document.getElementById('searchClear').addEventListener('click',()=>{document.getElementById('fundSearch').value='';renderFundGroups();});
-document.getElementById('favoritesOnlyBtn').addEventListener('click',()=>{window.favoritesOnly=!window.favoritesOnly;document.getElementById('favoritesOnlyBtn').style.background=window.favoritesOnly?'var(--primary-soft)':'var(--surface)';renderFundGroups();});
 document.getElementById('detailInvestBtn').addEventListener('click',()=>{const f=DATA.funds.find(x=>x.id===window.__detailFundId);if(!f)return;document.getElementById('fundDetailOverlay').hidden=true;openInvestModal();investOwnerSel.value=f.owner;populateInvestFunds();investFundSel.value=f.id;});
-document.getElementById('detailFavoriteBtn').addEventListener('click',()=>{const f=DATA.funds.find(x=>x.id===window.__detailFundId);if(!f)return;f.favorite=!f.favorite;saveData(DATA);renderDashboard();openFundDetail(f.id);showToast(f.favorite?'เพิ่มรายการโปรดแล้ว':'นำออกจากรายการโปรดแล้ว');});
 function renderDashboard(){
   renderHero();
   renderAllocation();
@@ -2156,7 +2256,6 @@ function openFundDetail(fundId){
   const plan=Number(yd.target||0)/12, tm=Number(yd.planMonths?.[currentMonthIndex()]||0), diff=plan-tm;
   const remainText=diff===0?'0':(diff>0?`ยังขาด ${fmtInt(diff)}`:`ลงเกิน ${fmtInt(Math.abs(diff))}`);
   document.getElementById('detailMonthlyPlan').innerHTML=`<div class="qm-item"><span class="qm-label">เดือนนี้ควรลงทุน</span><b class="qm-value">${fmtInt(plan)}</b></div><div class="qm-item"><span class="qm-label">ลงทุนแล้ว</span><b class="qm-value">${fmtInt(tm)}</b></div><div class="qm-item"><span class="qm-label">เหลือ</span><b class="qm-value">${remainText}</b></div>`;
-  const fb=document.getElementById('detailFavoriteBtn'); fb.textContent=f.favorite?'★ อยู่ในรายการโปรด':'☆ เพิ่มรายการโปรด';
   renderHistory(f);
   window.__detailFundId=fundId;
   renderDetailChart(vals);
