@@ -1441,6 +1441,14 @@ const FUND_ALIASES={
   'SCBSEMI(E)':'SCBSEMI(E)','SCBVIET(E)':'SCBVIET(E)','SCBGVALUE(E)':'SCBGVALUE(E)','SCBNK225E':'SCBNK225E',
   'SCBS&P500E':'SCBS&P500E','SCBGVALUE(E)':'SCBGVALUE(E)'
 };
+// V73: the Google Sheet (Funds / FundMaster / PlanMaster) is the source of truth for fund codes.
+// It spells these three differently from the codes that were hard-coded in older builds.
+// Map the legacy spellings to the Sheet spelling so Sheet rows, NAV, and classification
+// all resolve to one record and pushes never create duplicate FundMaster rows.
+Object.assign(FUND_ALIASES,{'SCBSTMFPLUS-I':'SCBTMFPLUS-I','SCBSTMFPLUS-E':'SCBTMFPLUS-E','KKP-INRMF':'KKP INRMF'});
+Object.entries({'SCBSTMFPLUS-I':'SCBTMFPLUS-I','SCBSTMFPLUS-E':'SCBTMFPLUS-E','KKP-INRMF':'KKP INRMF'}).forEach(([oldK,newK])=>{
+  if(FUND_MASTER[oldK]){ FUND_MASTER[newK]={...FUND_MASTER[oldK],displayName:newK}; delete FUND_MASTER[oldK]; }
+});
 const FUND_NAV={
   'SCBRMS&P500':{nav:22.8811,date:'8 ก.ย. 2569',source:'SCBAM'},
   'SCBRMWORLD(A)':{nav:16.4956,date:'8 ก.ย. 2569',source:'SCBAM'},
@@ -1987,7 +1995,7 @@ function stableAssetCategoryKey(f){
     const codeKey=compact.replace(/[^A-Z0-9&]/g,'');
     const keys=[codeKey,nameKey];
     const hit=re=>keys.some(k=>re.test(k));
-    if(hit(/STMF|FIXED|BOND|INRMF|^SCBRM[12]|^IUSB|^BND$/)) return 'bond';
+    if(hit(/TMFPLUS|STMF|FIXED|BOND|INRMF|^SCBRM[12]|^IUSB|^BND$/)) return 'bond';
     if(hit(/^SCBS&P500|^SCBSP500|GVALUE|SEMI|VIET|NK225|^TLUS500|^TLWORLD|^SCBRMS&P500|^SCBRMWORLD|THAIESG/)) return 'equity';
   }
   if(ownerKey==='wirocha'){
@@ -2794,6 +2802,7 @@ try{
   });
 }catch(e){}
 let GF_DATA={};
+try{const c=JSON.parse(localStorage.getItem('market_quotes_cache_v1')||'{}');if(c&&typeof c==='object')GF_DATA=c;}catch(e){}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function isETFAsset(a){
  const g=String(a?.group||'').toLowerCase(); const n=String(a?.name||'').toLowerCase(); const t=String(a?.ticker||'').toUpperCase();
@@ -2853,9 +2862,11 @@ if(document.fonts && document.fonts.ready){
  document.fonts.ready.then(()=>syncMarketTickerSpeed()).catch(()=>{});
 }
 function marketCard(a,data){const nodes=document.querySelectorAll(`[data-market="${CSS.escape(a.ticker)}"]`);nodes.forEach(c=>{if(!data||data.price==null||isNaN(Number(data.price))){c.classList.add('na');c.classList.remove('up','down');c.querySelector('.price').textContent='—';c.querySelector('.chg').textContent='ไม่พบข้อมูล';return;}const price=Number(data.price),ch=Number(data.change)||0,pct=Number(data.changepct)||0;c.classList.remove('na','up','down');c.classList.add(ch>=0?'up':'down');c.querySelector('.price').textContent='$'+price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});c.querySelector('.chg').textContent=(ch>=0?'▲ +':'▼ ')+ch.toFixed(2)+'  '+(pct>=0?'+':'')+pct.toFixed(2)+'%';});}
+// GOOGLEFINANCE addresses the Thai exchange as BKK, not SET ("SET:PTT" returns an error -> blank row).
+function gfExchange(x){const e=String(x||'').trim().toUpperCase();return e==='SET'?'BKK':e;}
 function marketFormulaRows(){
  const rows=[['Ticker','Name','Exchange','Active','Group','Price','Change','Change %','Trade Time','Data Delay','Open','High','Low','Volume','Market Cap','P/E','EPS','52W High','52W Low','Brand Key']];
- MARKET_ASSETS.forEach(a=>{const isFund=String(a.exchange||'').toUpperCase()==='FUND';const sym=`${a.exchange}:${a.ticker}`;const gf=(field)=>isFund?'':`=IFERROR(GOOGLEFINANCE("${sym}","${field}"),"")`;rows.push([a.ticker,a.name,a.exchange,a.active===false?'FALSE':'TRUE',a.group,gf('price'),gf('change'),gf('changepct'),gf('tradetime'),gf('datadelay'),gf('priceopen'),gf('high'),gf('low'),gf('volume'),gf('marketcap'),gf('pe'),gf('eps'),gf('high52'),gf('low52'),marketBrandKey(a)]);}); return rows;
+ MARKET_ASSETS.forEach(a=>{const isFund=String(a.exchange||'').toUpperCase()==='FUND';const sym=`${gfExchange(a.exchange)}:${a.ticker}`;const gf=(field)=>isFund?'':`=IFERROR(GOOGLEFINANCE("${sym}","${field}"),"")`;rows.push([a.ticker,a.name,a.exchange,a.active===false?'FALSE':'TRUE',a.group,gf('price'),gf('change'),gf('changepct'),gf('tradetime'),gf('datadelay'),gf('priceopen'),gf('high'),gf('low'),gf('volume'),gf('marketcap'),gf('pe'),gf('eps'),gf('high52'),gf('low52'),marketBrandKey(a)]);}); return rows;
 }
 async function ensureMarketSheet(){
  if(!sheetsToken||!sheetId)return false; const meta=await getSpreadsheetMeta(),titles=(meta.sheets||[]).map(s=>s.properties.title);
@@ -2880,7 +2891,7 @@ async function pullMarketWatch(){
   // Allow users to add a new ticker directly in Google Sheets by entering only
   // Ticker / Name / Exchange / Active / Group. If GOOGLEFINANCE cells are blank,
   // populate the formulas automatically so the next pull can display the data.
-  const formulaRows=[]; vals.forEach((r,i)=>{const ticker=String(r[0]||'').trim().toUpperCase();const exchange=String(r[2]||'').trim().toUpperCase();if(!ticker||!exchange||exchange==='FUND'||r[5]!==undefined&&String(r[5]).trim()!=='')return;const sym=`${exchange}:${ticker}`;const gf=f=>`=IFERROR(GOOGLEFINANCE(\"${sym}\",\"${f}\"),\"\")`;formulaRows.push({row:i+2,values:[gf('price'),gf('change'),gf('changepct'),gf('tradetime'),gf('datadelay'),gf('priceopen'),gf('high'),gf('low'),gf('volume'),gf('marketcap'),gf('pe'),gf('eps'),gf('high52'),gf('low52')]});});
+  const formulaRows=[]; vals.forEach((r,i)=>{const ticker=String(r[0]||'').trim().toUpperCase();const exchange=String(r[2]||'').trim().toUpperCase();if(!ticker||!exchange||exchange==='FUND'||r[5]!==undefined&&String(r[5]).trim()!=='')return;const sym=`${gfExchange(exchange)}:${ticker}`;const gf=f=>`=IFERROR(GOOGLEFINANCE(\"${sym}\",\"${f}\"),\"\")`;formulaRows.push({row:i+2,values:[gf('price'),gf('change'),gf('changepct'),gf('tradetime'),gf('datadelay'),gf('priceopen'),gf('high'),gf('low'),gf('volume'),gf('marketcap'),gf('pe'),gf('eps'),gf('high52'),gf('low52')]});});
   if(formulaRows.length){for(const fr of formulaRows){await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!F${fr.row}:S${fr.row}?valueInputOption=USER_ENTERED`,{method:'PUT',body:JSON.stringify({range:`MarketWatch!F${fr.row}:S${fr.row}`,majorDimension:'ROWS',values:[fr.values]})});}}
   const alreadySeeded=localStorage.getItem('market_sheet_top10_seeded_v1');
   const merged=alreadySeeded?{list:next,changed:false}:mergeDefaultAssets(next);
@@ -3691,6 +3702,7 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     else if(duplicateFundRowsRemoved>0) showToast('รวมกองทุนซ้ำในแอปแล้ว • ยังไม่เขียนทับ Google Sheets');
     else showToast('เติม NAV ซื้อและจำนวนหน่วยในแอปแล้ว • ยังไม่เขียนทับ Google Sheets');
   }
+  if(map.size){window.SESSION_PULLED=true;try{localStorage.setItem(STORAGE_KEY+'_last_updated',new Date().toISOString());updateLastUpdated();}catch(e){}}
   localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');return map.size;}
 async function reconcileTransactionUnitsToSheets(options={}){
   const changed=enrichAllTransactionUnits();
@@ -3707,7 +3719,7 @@ async function reconcileTransactionUnitsToSheets(options={}){
   return true;
 }
 
-function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>pushToSheets().catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
+function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v73] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
    เก็บฟังก์ชันไว้เป็น no-op กันโค้ดจุดอื่นที่ยังเรียกอยู่พัง แต่ไม่ทำอะไรจริง
@@ -3905,6 +3917,40 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
+
+
+/* ================= V73 BOOT SYNC =================
+   Previously the app only showed whatever was cached in localStorage and never
+   re-read the Sheet (auto-pull was disabled and the OAuth token lives in
+   sessionStorage), so every page drifted from the Sheet. Now: on load / when the
+   tab becomes visible, if a valid session token exists, pull Sheet -> app
+   (read-only) and refresh market quotes. Auto-push stays blocked until the first
+   successful pull so stale local data can never overwrite the Sheet. */
+(function(){
+  const _pmw=pullMarketWatch;
+  pullMarketWatch=async function(){
+    const r=await _pmw.apply(this,arguments);
+    try{ if(sheetsToken&&Object.keys(GF_DATA||{}).length) localStorage.setItem('market_quotes_cache_v1',JSON.stringify(GF_DATA)); }catch(e){}
+    return r;
+  };
+  let busy=false,last=0;
+  async function bootPull(){
+    if(busy||!sheetId) return; busy=true;
+    try{
+      if(await ensureSheetsAccess(false)){
+        await pullFromSheets({safeMerge:false});
+        await pullMarketWatch();
+        renderAll(); try{renderFinanceCards();}catch(e){}
+        last=Date.now();
+      }else if(!window.SESSION_PULLED){
+        showToast('แสดงข้อมูลที่เก็บในเครื่อง ยังไม่ตรงกับ Sheet — กดซิงค์เพื่อดึงข้อมูลล่าสุด');
+      }
+    }catch(e){console.warn('[v73] boot pull failed',e);}
+    finally{busy=false;}
+  }
+  window.addEventListener('load',()=>setTimeout(bootPull,600));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && Date.now()-last>60000) bootPull(); });
+})();
 
 /* ================= V12 DATA INTEGRITY ================= */
 // Prevent duplicate Portfolio records at creation time as well as during sync.

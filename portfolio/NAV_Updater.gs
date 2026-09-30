@@ -77,7 +77,7 @@ function backfillScbamNavHistory(){
   const parsed=parseScbamHistoricalNav_(html,wanted);
   const historySh=ensureNavHistorySheet_();
   const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
-  const keys=new Set(existing.map(r=>String(r[0]).slice(0,10)+'|'+String(r[1])));
+  const keys=new Set(existing.map(r=>navDateKey_(r[0])+'|'+String(r[1]).trim()));
   const tz=Session.getScriptTimeZone()||'Asia/Bangkok';
   const updatedAt=Utilities.formatDate(new Date(),tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
   const rows=[]; let funds=0; const dateSet=new Set();
@@ -121,6 +121,35 @@ function ensureNavStatusSheet_(){
 function logNavRun_(status, updated, history, details, error){
   const sh=ensureNavStatusSheet_();
   sh.appendRow([new Date(),status,updated||0,history||0,details||'',error||'']);
+}
+
+// V73: Sheets converts "2026-09-29" typed into column A to a real Date. getValues() then returns
+// a Date object, and String(Date) never equals "2026-09-29", so the duplicate check below never
+// matched and every run appended the whole NAV list again. Always normalise to yyyy-MM-dd.
+function navDateKey_(v){
+  if(v instanceof Date && !isNaN(v)) return Utilities.formatDate(v,Session.getScriptTimeZone()||'Asia/Bangkok','yyyy-MM-dd');
+  return String(v||'').trim().slice(0,10);
+}
+
+// Run once from the Apps Script editor to delete the duplicate rows already in FundNAV_History.
+// Keeps the LATEST row (by Updated At) for each Date + Fund Code. Backs up nothing - duplicate a
+// copy of the sheet first if you want a safety net.
+function dedupeNavHistoryNow(){
+  const sh=ensureNavHistorySheet_();
+  const n=sh.getLastRow()-1; if(n<1) return 0;
+  const rng=sh.getRange(2,1,n,8), vals=rng.getValues();
+  const best=new Map();
+  vals.forEach((r,i)=>{
+    const k=navDateKey_(r[0])+'|'+String(r[1]).trim();
+    const cur=best.get(k);
+    if(!cur || String(r[6])>=String(vals[cur.i][6])) best.set(k,{i});
+  });
+  const keep=[...best.values()].map(x=>x.i).sort((a,b)=>a-b).map(i=>{const r=vals[i].slice();r[0]=navDateKey_(r[0]);return r;});
+  keep.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))||String(a[1]).localeCompare(String(b[1])));
+  rng.clearContent();
+  sh.getRange(2,1,keep.length,8).setValues(keep);
+  Logger.log('FundNAV_History: '+vals.length+' -> '+keep.length+' rows');
+  return vals.length-keep.length;
 }
 
 function ensureNavHistorySheet_(){
@@ -252,7 +281,7 @@ function writeNavUpdates_(ctx,updates,sourceLabel){
   const now=new Date(); const tz=Session.getScriptTimeZone()||'Asia/Bangkok';
   const updatedAt=Utilities.formatDate(now,tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
   const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
-  const keys=new Set(existing.map(r=>String(r[0])+'|'+String(r[1])));
+  const keys=new Set(existing.map(r=>navDateKey_(r[0])+'|'+String(r[1]).trim()));
   const historyRows=[]; let count=0;
   ctx.rows.forEach(item=>{
     const u=updates[item.code]; if(!u)return;
@@ -361,7 +390,7 @@ function recordCurrentNAVToHistory_(){
   const dateKey=Utilities.formatDate(now,tz,'yyyy-MM-dd');
   const updatedAt=Utilities.formatDate(now,tz,"yyyy-MM-dd'T'HH:mm:ssXXX");
   const existing=historySh.getLastRow()>1?historySh.getRange(2,1,historySh.getLastRow()-1,8).getValues():[];
-  const keys=new Set(existing.map(r=>String(r[0]).slice(0,10)+'|'+String(r[1])));
+  const keys=new Set(existing.map(r=>navDateKey_(r[0])+'|'+String(r[1]).trim()));
   const rows=[];
   ctx.rows.forEach(item=>{
     const nav=Number(item.oldNav); if(!(nav>0))return;
