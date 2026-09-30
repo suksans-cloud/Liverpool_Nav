@@ -1967,14 +1967,19 @@ function assetCategoryForFund(f){
   if(owner==='e-saving' || owner==='esaving' || owner==='e saving') {
     return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'};
   }
-  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','BND','IDV','QQQ','QQQI']);
-  const BOND_CODES=new Set(['SCBRM1','SCBRM2','SCBSTMFPLUS-I','SCBSTMFPLUS-E','SCBFIXEDA','KKP-INRMF']);
+  const ETF_CODES=new Set(['VOO','VXUS','SCHD','QQQM','VT','VTI','SPY','IVV','BND','IDV','QQQ','QQQI','IAGG','ACWI','GRID','IUSB']);
+  const BOND_CODES=new Set(['SCBRM1','SCBRM2','SCBSTMFPLUS-I','SCBSTMFPLUS-E','SCBFIXEDA','KKP-INRMF','IUSB','BND']);
   const ALT_CODES=new Set(['SCBGOLDHRMF','KKP COREPATH BALANCED RMF']);
   const EQUITY_CODES=new Set(['SCBRMS&P500','SCBRMWORLD(A)','SCBTM(THAIESGE)','SCBTM(THAIESGA)','TLUS500RMF','TLWORLDXUSRMF','TLWORLD-X','SCBSEMI(E)','SCBVIET(E)','SCBGVALUE(E)','SCBNK225E','SCBS&P500E','GOOGL']);
-  if(ETF_CODES.has(code)) return {key:'etf',label:'ETF',color:'#7B2BE0',note:''};
+  // Explicit code rules take precedence over FundMaster text so known funds remain stable
+  // even when a Sheet row has a broad/legacy asset-class label.
+  if(ETF_CODES.has(code) && !BOND_CODES.has(code)) return {key:'etf',label:'ETF',color:'#7B2BE0',note:''};
   if(BOND_CODES.has(code)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
   if(ALT_CODES.has(code)) return {key:'alternative',label:'สินทรัพย์ทางเลือก',color:'#E8B645',note:''};
   if(EQUITY_CODES.has(code)) return {key:'equity',label:'ตราสารทุน',color:'#F06D6D',note:''};
+  // Fixed-income fund families: robust fallback for variants/suffixes such as
+  // SCBSTMFPLUS-E (3000), SCBRM1/2 and KKP income funds.
+  if(/SCBSTMFPLUS|SCBFIXED|SCBRM[12]$|KKP.*INRMF|\bIUSB\b|\bBND\b/.test(code)) return {key:'bond',label:'ตราสารหนี้',color:'#3E82DC',note:''};
   const raw=(String(meta.assetClass||'')+' '+String(meta.officialName||'')+' '+name).toLowerCase();
   const normalized=raw.replace(/[\-_\/(,),.]/g,' ');
   if(/e\s*[- ]?saving|esaving|เงินสำรอง|สภาพคล่อง/.test(normalized)) return {key:'reserve',label:'เงินสำรอง',color:'#2F9D8F',note:'รวม E-Saving ทั้งหมด'};
@@ -2091,13 +2096,23 @@ function brandKeyForFund(f){
   const INVESCO=new Set(['QQQ','QQQM']);
   const NEOS=new Set(['QQQI']);
   const SPDR=new Set(['SPY']);
-  const ISHARES=new Set(['IVV','IDV']);
+  const ISHARES=new Set(['IVV','IDV','IAGG','ACWI','IUSB']);
+  const GLOBAL_X=new Set(['GRID']);
+  // Market-watch ETF issuers. These cover the tickers used by the app even when
+  // they do not exist in FundMaster because ETF/Stock Watch is separate data.
+  if(GLOBAL_X.has(code)) return 'globalx';
   if(VANGUARD.has(code)) return 'vanguard';
   if(SCHWAB.has(code)) return 'schwab';
   if(INVESCO.has(code)) return 'invesco';
   if(NEOS.has(code)) return 'neos';
   if(SPDR.has(code)) return 'spdr';
   if(ISHARES.has(code)) return 'ishares';
+  const STOCK_BRANDS={
+    'AAPL':'apple','AMD':'amd','AMZN':'amazon','ASML':'asml','ASTS':'asts','AVGO':'broadcom','AAOI':'aaoi',
+    'MSFT':'microsoft','NVDA':'nvidia','GOOGL':'google','META':'meta','TSLA':'tesla','JPM':'jpmorgan',
+    'MU':'micron','NBIS':'nebius','CPALL':'cpall','BBL':'bbl','AAPL':'apple'
+  };
+  if(STOCK_BRANDS[code]) return STOCK_BRANDS[code];
   if(manager==='VANGUARD') return 'vanguard';
   if(manager==='SCHWAB') return 'schwab';
   if(manager==='INVESCO') return 'invesco';
@@ -2126,6 +2141,24 @@ function brandLogoSvg(key){
     krungsri:`<svg viewBox="0 0 64 64" aria-label="Krungsri"><rect width="64" height="64" rx="14" fill="#f5b400"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">K</text></svg>`,
     kasset:`<svg viewBox="0 0 64 64" aria-label="KAsset"><rect width="64" height="64" rx="14" fill="#0b6b3a"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">K</text></svg>`,
     morningstar:`<svg viewBox="0 0 64 64" aria-label="Morningstar"><rect width="64" height="64" rx="14" fill="#fff"/><circle cx="32" cy="32" r="19" fill="#e31837"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">★</text></svg>`,
+    globalx:`<svg viewBox="0 0 64 64" aria-label="Global X"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">Global X</text></svg>`,
+    apple:`<svg viewBox="0 0 64 64" aria-label="Apple"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="40" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="900" fill="#fff">A</text></svg>`,
+    amd:`<svg viewBox="0 0 64 64" aria-label="AMD"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="900" fill="#fff">AMD</text></svg>`,
+    amazon:`<svg viewBox="0 0 64 64" aria-label="Amazon"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="37" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#fff">AMZ</text></svg>`,
+    asml:`<svg viewBox="0 0 64 64" aria-label="ASML"><rect width="64" height="64" rx="14" fill="#123b67"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="900" fill="#fff">ASML</text></svg>`,
+    asts:`<svg viewBox="0 0 64 64" aria-label="ASTS"><rect width="64" height="64" rx="14" fill="#26364a"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="900" fill="#fff">ASTS</text></svg>`,
+    broadcom:`<svg viewBox="0 0 64 64" aria-label="Broadcom"><rect width="64" height="64" rx="14" fill="#d22a35"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#fff">AVGO</text></svg>`,
+    google:`<svg viewBox="0 0 64 64" aria-label="Alphabet"><rect width="64" height="64" rx="14" fill="#fff"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="900" fill="#4285f4">G</text></svg>`,
+    microsoft:`<svg viewBox="0 0 64 64" aria-label="Microsoft"><rect width="64" height="64" rx="14" fill="#fff"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="900" fill="#00a4ef">M</text></svg>`,
+    nvidia:`<svg viewBox="0 0 64 64" aria-label="NVIDIA"><rect width="64" height="64" rx="14" fill="#76b900"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">NVDA</text></svg>`,
+    meta:`<svg viewBox="0 0 64 64" aria-label="Meta"><rect width="64" height="64" rx="14" fill="#1877f2"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="900" fill="#fff">M</text></svg>`,
+    tesla:`<svg viewBox="0 0 64 64" aria-label="Tesla"><rect width="64" height="64" rx="14" fill="#111"/><text x="32" y="40" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="900" fill="#e82127">T</text></svg>`,
+    jpmorgan:`<svg viewBox="0 0 64 64" aria-label="JPMorgan"><rect width="64" height="64" rx="14" fill="#1172c4"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">JPM</text></svg>`,
+    micron:`<svg viewBox="0 0 64 64" aria-label="Micron"><rect width="64" height="64" rx="14" fill="#1d3f6e"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">MU</text></svg>`,
+    nebius:`<svg viewBox="0 0 64 64" aria-label="Nebius"><rect width="64" height="64" rx="14" fill="#fff"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#111">NBIS</text></svg>`,
+    cpall:`<svg viewBox="0 0 64 64" aria-label="CP All"><rect width="64" height="64" rx="14" fill="#e51b23"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#fff">CP</text></svg>`,
+    bbl:`<svg viewBox="0 0 64 64" aria-label="BBL"><rect width="64" height="64" rx="14" fill="#1b4d8b"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="900" fill="#fff">BBL</text></svg>`,
+    aaoi:`<svg viewBox="0 0 64 64" aria-label="AAOI"><rect width="64" height="64" rx="14" fill="#394b63"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">AAOI</text></svg>`,
     etf:`<svg viewBox="0 0 64 64" aria-label="ETF"><rect width="64" height="64" rx="14" fill="#eef3f7"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#17324d">ETF</text></svg>`,
     fund:`<svg viewBox="0 0 64 64" aria-label="Fund"><rect width="64" height="64" rx="14" fill="#eef3f7"/><path d="M18 42V26h7l7 9 7-9h7v16h-7v-8l-7 8-7-8v8z" fill="#17324d"/></svg>`
   };
