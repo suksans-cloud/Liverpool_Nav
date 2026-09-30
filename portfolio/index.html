@@ -283,6 +283,10 @@
     cursor:pointer;
   }
   .fund-row:last-child{ border-bottom:0; }
+  .fund-row-badge.logo-badge{background:#fff;border:1px solid #DCE4EA;overflow:hidden;padding:0;display:grid;place-items:center}
+  .fund-row-badge.logo-badge svg{width:100%;height:100%;display:block}
+  .v39-card-logo.brand-logo{background:#fff;overflow:hidden;padding:0}
+  .v39-card-logo.brand-logo svg{width:100%;height:100%;display:block}
   .fund-row-badge{
     width:28px; height:28px; border-radius:50%; flex:0 0 auto;
     display:flex; align-items:center; justify-content:center;
@@ -2064,6 +2068,41 @@ function renderFilters(){
     });
   });
 }
+function brandKeyForFund(f){
+  const code=canonicalFundCode(f?.name||f?.ticker||'');
+  const meta=FUND_MASTER[code]||{};
+  const manager=String(meta.manager||'').toUpperCase();
+  if(code==='VOO'||code==='VXUS'||manager==='VANGUARD') return 'vanguard';
+  if(code==='SCHD'||manager==='SCHWAB') return 'schwab';
+  if(code==='QQQM'||manager==='INVESCO') return 'invesco';
+  if(manager==='SCBAM'||/^SCB/.test(code)) return 'scb';
+  if(manager==='TALIS'||/^TL/.test(code)) return 'talis';
+  if(manager==='KKPAM'||/^KKP/.test(code)) return 'kkp';
+  if(manager==='KRUNGSRI'||manager==='BAY') return 'krungsri';
+  if(manager==='KASSET'||manager==='KASIKORN') return 'kasset';
+  if(manager==='MORNINGSTAR') return 'morningstar';
+  if(meta.assetClass==='ETF') return 'etf';
+  return 'fund';
+}
+function brandLogoSvg(key){
+  const logos={
+    scb:`<svg viewBox="0 0 64 64" aria-label="SCB"><rect width="64" height="64" rx="14" fill="#6f2dbd"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="800" fill="#fff">SCB</text></svg>`,
+    vanguard:`<svg viewBox="0 0 64 64" aria-label="Vanguard"><rect width="64" height="64" rx="14" fill="#c8202f"/><path d="M16 18h8l8 20 8-20h8L35 48h-7z" fill="#fff"/><path d="M20 18h24" stroke="#fff" stroke-width="2" opacity=".9"/></svg>`,
+    schwab:`<svg viewBox="0 0 64 64" aria-label="Schwab"><rect width="64" height="64" rx="14" fill="#f3f7f9"/><circle cx="32" cy="32" r="21" fill="#39a9db"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#fff">S</text></svg>`,
+    invesco:`<svg viewBox="0 0 64 64" aria-label="Invesco"><rect width="64" height="64" rx="14" fill="#073a78"/><circle cx="32" cy="32" r="17" fill="none" stroke="#fff" stroke-width="3"/><path d="M18 40c7-15 20-20 29-18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="45" cy="22" r="3" fill="#fff"/></svg>`,
+    talis:`<svg viewBox="0 0 64 64" aria-label="TALIS"><rect width="64" height="64" rx="14" fill="#123d5a"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#fff">TALIS</text></svg>`,
+    kkp:`<svg viewBox="0 0 64 64" aria-label="KKP"><rect width="64" height="64" rx="14" fill="#005baa"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="900" fill="#fff">KKP</text></svg>`,
+    krungsri:`<svg viewBox="0 0 64 64" aria-label="Krungsri"><rect width="64" height="64" rx="14" fill="#f5b400"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#fff">K</text></svg>`,
+    kasset:`<svg viewBox="0 0 64 64" aria-label="KAsset"><rect width="64" height="64" rx="14" fill="#0b6b3a"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">K</text></svg>`,
+    morningstar:`<svg viewBox="0 0 64 64" aria-label="Morningstar"><rect width="64" height="64" rx="14" fill="#fff"/><circle cx="32" cy="32" r="19" fill="#e31837"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">★</text></svg>`,
+    etf:`<svg viewBox="0 0 64 64" aria-label="ETF"><rect width="64" height="64" rx="14" fill="#eef3f7"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#17324d">ETF</text></svg>`,
+    fund:`<svg viewBox="0 0 64 64" aria-label="Fund"><rect width="64" height="64" rx="14" fill="#eef3f7"/><path d="M18 42V26h7l7 9 7-9h7v16h-7v-8l-7 8-7-8v8z" fill="#17324d"/></svg>`
+  };
+  return logos[key]||logos.fund;
+}
+function fundLogoMarkup(f, cls=''){
+  return `<div class="fund-row-badge logo-badge ${cls}" aria-label="${escapeHtml(FUND_MASTER[canonicalFundCode(f?.name||'')]?.manager||'Fund')}">${brandLogoSvg(brandKeyForFund(f))}</div>`;
+}
 function renderFundGroups(){
   const wrap = document.getElementById('fundGroups');
   const visible=filteredFunds(); const list=[...new Set(visible.map(f=>f.owner))];
@@ -2086,7 +2125,7 @@ function renderFundGroups(){
       const navText = nav ? `NAV ${Number(nav.nav).toFixed(4)} · ${nav.date}` : 'NAV: รอข้อมูล';
       return `
       <div class="fund-row" data-fund-id="${f.id}">
-        <div class="fund-row-badge" style="background:${ownerColor(owner)}">${escapeHtml(initials)}</div>
+        ${fundLogoMarkup(f)}
         <div class="fund-row-body">
           <div class="fund-row-line1">
             <span class="fund-row-name">${escapeHtml(cleanFundDisplayName(f.name))}</span>
@@ -3735,7 +3774,7 @@ renderAll();
 <script id="v39-manager-redesign-js">
 (function(){
   const ownerNames=['Suksan','Wirocha','Phoom'];
-  function logoFor(t){const x=String(t||'').toUpperCase(); return x.length>7?x.slice(0,3):x.slice(0,5)||'FUND';}
+  function logoFor(t){ const code=canonicalFundCode(t); return brandLogoSvg(brandKeyForFund({name:code})); }
   function renderFundManager(){
     const el=document.getElementById('marketManagerList'); if(!el)return;
     const list=(typeof financeMyFundsList==='function'?financeMyFundsList():[]);
@@ -3750,7 +3789,7 @@ renderAll();
       const owner=a.owner||a.portfolioOwner||'';
       const opts=ownerNames.map(o=>`<option value="${esc(o)}" ${o===owner?'selected':''}>${esc(o)}</option>`).join('');
       return `<div class="v39-manager-card" data-ticker="${esc(a.ticker)}">
-        <div class="v39-card-main"><div class="v39-card-logo">${esc(logoFor(a.ticker))}</div><div style="min-width:0"><div class="v39-card-symbol">${esc(a.ticker)}</div><div class="v39-card-name">${esc(a.name||a.ticker)}</div><div class="v39-card-meta">${esc(a.group||'กองทุน')}${a.nav!=null?' • NAV '+esc(a.nav):''}</div></div></div>
+        <div class="v39-card-main"><div class="v39-card-logo brand-logo">${logoFor(a.ticker)}</div><div style="min-width:0"><div class="v39-card-symbol">${esc(a.ticker)}</div><div class="v39-card-name">${esc(a.name||a.ticker)}</div><div class="v39-card-meta">${esc(a.group||'กองทุน')}${a.nav!=null?' • NAV '+esc(a.nav):''}</div></div></div>
         <select class="v39-owner-select" data-owner>${opts}</select>
         <span class="v39-card-status">ใช้งาน</span>
         <button class="v39-card-remove" type="button" title="ลบ" data-remove>×</button>
@@ -3778,7 +3817,7 @@ renderAll();
     document.getElementById('managerSymbolBox').hidden=false;
     document.getElementById('managerNote').textContent='ค้นหา Symbol ใหม่ได้จากช่องเดียว • ระบบจะกัน Symbol ซ้ำก่อนเพิ่ม';
     el.innerHTML=list.length?list.map(a=>`<div class="v39-manager-card" data-ticker="${esc(a.ticker)}">
-      <div class="v39-card-main"><div class="v39-card-logo">${esc(logoFor(a.ticker))}</div><div style="min-width:0"><div class="v39-card-symbol">${esc(a.ticker)}</div><div class="v39-card-name">${esc(a.name||a.ticker)}</div><div class="v39-card-meta">${esc(a.exchange||'')}${a.group?' • '+esc(a.group):''}</div></div></div>
+      <div class="v39-card-main"><div class="v39-card-logo brand-logo">${logoFor(a.ticker)}</div><div style="min-width:0"><div class="v39-card-symbol">${esc(a.ticker)}</div><div class="v39-card-name">${esc(a.name||a.ticker)}</div><div class="v39-card-meta">${esc(a.exchange||'')}${a.group?' • '+esc(a.group):''}</div></div></div>
       <div class="v39-card-meta">${a.navPending?'NAV รอข้อมูล':'GOOGLEFINANCE'}</div>
       <select class="v39-owner-select" data-active><option value="true" ${a.active!==false?'selected':''}>ใช้งาน</option><option value="false" ${a.active===false?'selected':''}>ปิด</option></select>
       <button class="v39-card-remove" type="button" title="ลบ" data-remove>×</button>
