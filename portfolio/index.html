@@ -1825,7 +1825,7 @@ function updateLastUpdated(){
   }
   const d=new Date(ts);
   el.textContent='อัปเดตล่าสุด: '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})+' • '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.';
-  el.textContent+=' · v75';
+  el.textContent+=' · v76';
 }
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1907,7 +1907,7 @@ function addTransaction(f,date,amount,note='',purchaseNav='',units=''){
   if(Number(purchaseNav)>0) tx.purchaseNav=Number(purchaseNav);
   if(Number(units)>0) tx.units=Number(units);
   enrichTransactionUnits(tx,f.name);
-  f.transactions.push(tx);const yd=yearData(f,tx.year,true);yd.months[tx.month]=(Number(yd.months[tx.month])||0)+tx.amount; yd.planMonths=yd.planMonths||{}; yd.planMonths[tx.month]=(Number(yd.planMonths[tx.month])||0)+tx.amount;
+  f.transactions.push(tx);const yd=yearData(f,tx.year,true);yd.months[tx.month]=(Number(yd.months[tx.month])||0)+tx.amount; yd.planMonths=yd.planMonths||{}; yd.planMonths[tx.month]=(Number(yd.planMonths[tx.month])||0)+tx.amount; yd.masterActual=Object.values(yd.planMonths).reduce((a,b)=>a+(Number(b)||0),0);
 }
 function renderHistory(f){
   const wrap=document.getElementById('detailHistory');if(!wrap)return;
@@ -1928,6 +1928,8 @@ function editTransaction(fundId,txId){
   // Move the amount between monthly cells so Q (sum of E:P) always matches this edit.
   const oldYd=yearData(f,oldYear,true); oldYd.planMonths=oldYd.planMonths||{}; oldYd.planMonths[oldMonth]=Math.max(0,(Number(oldYd.planMonths[oldMonth])||0)-oldAmount);
   const newYd=yearData(f,t.year,true); newYd.planMonths=newYd.planMonths||{}; newYd.planMonths[t.month]=(Number(newYd.planMonths[t.month])||0)+t.amount;
+  oldYd.masterActual=Object.values(oldYd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
+  newYd.masterActual=Object.values(newYd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
   saveData(DATA);renderAll();openFundDetail(f.id);showToast('แก้ไขรายการและโน้ตแล้ว');
 }
 function deleteTransaction(fundId,txId){
@@ -1935,7 +1937,7 @@ function deleteTransaction(fundId,txId){
   if(!confirm(`ลบรายการ ${fmtInt(t.amount)} วันที่ ${t.date} ใช่หรือไม่?`))return;
   f.transactions=f.transactions.filter(x=>x.id!==txId);rebuildFundMonths(f);
   // Remove the amount from its monthly cell too, so Q (sum of E:P) stays correct.
-  const yd=yearData(f,t.year,true); yd.planMonths=yd.planMonths||{}; yd.planMonths[t.month]=Math.max(0,(Number(yd.planMonths[t.month])||0)-(Number(t.amount)||0));
+  const yd=yearData(f,t.year,true); yd.planMonths=yd.planMonths||{}; yd.planMonths[t.month]=Math.max(0,(Number(yd.planMonths[t.month])||0)-(Number(t.amount)||0)); yd.masterActual=Object.values(yd.planMonths).reduce((a,b)=>a+(Number(b)||0),0);
   saveData(DATA);renderAll();openFundDetail(f.id);showToast('ลบรายการแล้ว');
 }
 
@@ -1944,16 +1946,14 @@ const fmtNum = n => Math.round(n).toLocaleString('th-TH');
 function fundActual(f){
   const y=Number(selectedYear);
   const yd=yearData(f,y,true);
-  // PlanMaster Q (masterActual) is the single source used by the Overview/
-  // Asset Allocation for "ลงทุนจริง" after a Sheets sync. This keeps the app
-  // aligned with the value already maintained in the Sheet, including E-Saving.
+  // V76: the visible "เงินลงทุนจริง" value is always derived from the
+  // editable monthly cells. This is the behavior the detail page and the
+  // annual table need: Jan..Dec are summed into one actual total.
+  const monthlyActual=Object.values(yd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
+  if(monthlyActual>0) return monthlyActual;
+  // Legacy fallback only for old rows that have no monthly values yet.
   if(Object.prototype.hasOwnProperty.call(yd,'masterActual')) return Number(yd.masterActual)||0;
-  // Backward compatibility for local data created before masterActual existed.
-  if(/e\s*[- ]?saving|esaving/.test(String(canonicalOwner(f?.owner||'')).trim().toLowerCase())){
-    const txTotal=(f.transactions||[]).filter(t=>Number(t.year)===y).reduce((s,t)=>s+(Number(t.amount)||0),0);
-    if(txTotal>0) return txTotal;
-  }
-  return Object.values(yd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
+  return 0;
 }
 function fundPlan(f){
   const yd=yearData(f,selectedYear,true);
@@ -2390,6 +2390,8 @@ function renderTable(){
       const yd=yearData(f,selectedYear,true);
       yd.planMonths = yd.planMonths || {};
       yd.planMonths[month] = value;
+      yd.masterActual = Object.values(yd.planMonths).reduce((a,b)=>a+(Number(b)||0),0);
+      yd.masterPct = yd.masterTarget ? Math.round(yd.masterActual/yd.masterTarget*100)+'%' : '';
       saveData(DATA);
       updateRowComputed(f.id);
       renderHero(); renderAllocation(); renderSmartSummary(); renderFundGroups();
@@ -2487,6 +2489,8 @@ function openFundDetail(fundId){
       const yd2=yearData(f,selectedYear,true);
       yd2.planMonths=yd2.planMonths||{};
       yd2.planMonths[month]=value;
+      yd2.masterActual=Object.values(yd2.planMonths).reduce((a,b)=>a+(Number(b)||0),0);
+      yd2.masterPct=yd2.masterTarget ? Math.round(yd2.masterActual/yd2.masterTarget*100)+'%' : '';
       // Detail page: keep the monthly actual value and transaction history in sync
       // so the summary strip above updates immediately after editing the month.
       syncMonthlyCellToTransactions(f, selectedYear, month, value);
@@ -3577,9 +3581,13 @@ function sheetRows(){
   Object.entries(FUND_MASTER).forEach(([code,m])=>{const n=FUND_NAV[code]||{};master.push([code,m.displayName,m.officialName||'',m.manager||'',m.assetClass||'',n.nav??'',n.date??'',n.source??'', 'TRUE']);});
   DATA.funds.forEach(f=>{normalizeFund(f);const code=canonicalFundCode(f.name),m=FUND_MASTER[code]||{};funds.push([f.id,f.owner,code,m.displayName||code,m.officialName||'',m.manager||'',m.assetClass||'',f.favorite?'TRUE':'FALSE',fundTarget(f),f.assetCategoryKey]);});
   DATA.funds.forEach(f=>{const code=canonicalFundCode(f.name),name=(FUND_MASTER[code]?.displayName||code);const years=Object.keys(f.years||{}).map(Number).filter(Boolean).sort((a,b)=>a-b);const ys=years.length?years:[selectedYear];ys.forEach(y=>{const yd=yearData(f,y,true);const monthVals=MONTHS.map((_,i)=>Number((yd.planMonths||{})[i+1])||0);
-    // Q is the authoritative "เงินลงทุนจริง" value and must survive a sync.
-    // Never overwrite it with the monthly plan sum E:P.
-    const actual=Object.prototype.hasOwnProperty.call(yd,'masterActual') ? (Number(yd.masterActual)||0) : monthVals.reduce((a,b)=>a+b,0);
+    // V76: "เงินลงทุนจริง" is the total of the 12 editable monthly cells E:P.
+    // Q is a derived total, not an independent source of truth. This prevents a
+    // stale Q value from freezing the app after a monthly cell is edited.
+    const monthlyActual=monthVals.reduce((a,b)=>a+b,0);
+    const legacyActual=Object.prototype.hasOwnProperty.call(yd,'masterActual') ? (Number(yd.masterActual)||0) : 0;
+    const actual=monthlyActual>0 ? monthlyActual : legacyActual;
+    yd.masterActual=actual;
     const target=Number(yd.masterTarget ?? yd.target ?? f.target)||0;
     const pct=target?Math.round(actual/target*100):0;
     plan.push([y,f.owner,code,String(yd.masterDisplayName||name),...monthVals,actual,target,pct+'%']);});});
@@ -3651,9 +3659,13 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
       map.set(f.id,f);
     }
     const monthVals=Array.from({length:12},(_,i)=>sheetNum(r[4+i]));
-    // PlanMaster Q is the authoritative annual "เงินลงทุนจริง" value.
-    // Never replace Q with the E:P monthly-plan sum.
-    const actual = (r[16]!==undefined && r[16]!=='') ? sheetNum(r[16]) : monthVals.reduce((a,b)=>a+b,0);
+    // V76: the 12 monthly cells are the source for "เงินลงทุนจริง". If an old
+    // Sheet row has no monthly data at all, retain Q as a legacy fallback so an
+    // existing amount is not silently erased during migration. Once any month is
+    // present, the monthly sum wins and Q will be rewritten from that sum.
+    const monthlyActual=monthVals.reduce((a,b)=>a+b,0);
+    const sheetActual=(r[16]!==undefined && r[16]!=='') ? sheetNum(r[16]) : 0;
+    const actual = monthlyActual>0 ? monthlyActual : sheetActual;
     const key=owner+'|'+fundMatchKey(code)+'|'+y;
     const prev=planByIdentity.get(key);
     if(prev){
@@ -3700,7 +3712,9 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     yd.planMonths={};
     months.forEach((v,i)=>yd.planMonths[i+1]=Number(v)||0);
     if(displayName) yd.masterDisplayName=displayName;
-    // PlanMaster Q/R/S are the authoritative annual actual, target and percentage.
+    // V76: Q is derived from the monthly cells. Keep it in local state only as
+    // the cached total so existing UI code can read it, but never let stale Q
+    // override the monthly values.
     yd.masterActual=Number(actual)||0;
     yd.masterTarget=Number(target)||0;
     yd.masterPct=pct;
@@ -3739,7 +3753,7 @@ async function reconcileTransactionUnitsToSheets(options={}){
   return true;
 }
 
-function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v75] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
+function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v76] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
    เก็บฟังก์ชันไว้เป็น no-op กันโค้ดจุดอื่นที่ยังเรียกอยู่พัง แต่ไม่ทำอะไรจริง
@@ -3965,7 +3979,7 @@ if('serviceWorker' in navigator){
       }else if(!window.SESSION_PULLED){
         showToast('แสดงข้อมูลที่เก็บในเครื่อง ยังไม่ตรงกับ Sheet — กดซิงค์เพื่อดึงข้อมูลล่าสุด');
       }
-    }catch(e){console.warn('[v75] boot pull failed',e);}
+    }catch(e){console.warn('[v76] boot pull failed',e);}
     finally{busy=false;}
   }
   window.addEventListener('load',()=>setTimeout(bootPull,600));
