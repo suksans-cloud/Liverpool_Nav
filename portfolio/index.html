@@ -1391,7 +1391,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V78 Safe Pull + No Auto Push + Data Integrity';
+const APP_BUILD = 'V81 Logo Fallback Fix + V80 MarketWatch Sheet Source';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -2201,6 +2201,9 @@ function normalizeMasterBrandKey(value){
   const raw=String(value||'').trim();
   if(!raw) return '';
   if(/^https?:\/\//i.test(raw)) return 'url:'+raw;
+  // Preserve ticker fallback as uppercase; otherwise normalization lowercases it
+  // and the SVG initials regex strips every letter, making the logo appear blank.
+  if(/^ticker:/i.test(raw)) return 'ticker:'+raw.slice(raw.indexOf(':')+1).toUpperCase();
   const k=raw.toLowerCase().replace(/[^a-z0-9]+/g,'');
   const map={vanguard:'vanguard',vanguardgroup:'vanguard',schwab:'schwab',charlesschwab:'schwab',invesco:'invesco',neos:'neos',spdr:'spdr',statestreet:'spdr',ishares:'ishares',blackrock:'ishares',globalx:'globalx',scb:'scb',scbam:'scb',talis:'talis',kkp:'kkp',krungsri:'krungsri',kasset:'kasset',kasikorn:'kasset',morningstar:'morningstar',apple:'apple',microsoft:'microsoft',nvidia:'nvidia',google:'google',amazon:'amazon',meta:'meta',broadcom:'broadcom',berkshire:'berkshire'};
   return map[k]||raw.toLowerCase();
@@ -2243,8 +2246,8 @@ function brandLogoSvg(key){
     const src=rawKey.slice(4).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     return `<svg viewBox="0 0 64 64" aria-label="Logo"><rect width="64" height="64" rx="14" fill="#fff"/><image href="${src}" x="5" y="5" width="54" height="54" preserveAspectRatio="xMidYMid meet"/></svg>`;
   }
-  if(rawKey.indexOf('ticker:')===0){
-    const ticker=rawKey.slice(7).replace(/[^A-Z0-9.\-]/g,'').slice(0,7)||'—';
+  if(/^ticker:/i.test(rawKey)){
+    const ticker=rawKey.slice(rawKey.indexOf(':')+1).toUpperCase().replace(/[^A-Z0-9.\-]/g,'').slice(0,7)||'•';
     return `<svg viewBox="0 0 64 64" aria-label="${ticker}"><rect width="64" height="64" rx="14" fill="#eef3f7"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="${ticker.length>5?11:15}px" font-weight="900" fill="#17324d">${ticker}</text></svg>`;
   }
   const logos={
@@ -2837,9 +2840,9 @@ function isETFAsset(a){
  const assetType=String(a?.assetType||a?.assetClass||'').trim().toLowerCase();
  const masterKind=String(a?.instrumentType||'').trim().toLowerCase();
  return /\betf\b|exchange\s*-?\s*traded/.test(g) || /\betf\b|exchange\s*-?\s*traded/.test(n) ||
-        /\betf\b|exchange\s*-?\s*traded/.test(assetType) || /\betf\b/.test(masterKind) ||
-        ['ETF','EXCHANGE TRADED FUND','กองทุน ETF','อีทีเอฟ'].includes(String(a?.group||'').trim().toUpperCase()) ||
-        ['VOO','VXUS','QQQM','VT','VTI','SCHD'].includes(t);
+        /\betf\b|exchange\s*-?\s*traded/.test(assetType) || /\betf\b|exchange\s*-?\s*traded/.test(masterKind) ||
+        ['ETF','EXCHANGE TRADED FUND','EXCHANGE TRADED','กองทุน ETF','อีทีเอฟ'].includes(String(a?.group||'').trim().toUpperCase()) ||
+        ['VOO','VXUS','QQQM','VT','VTI','SCHD','VTI','BND','SPY','IVV','QQQ','QQQI','ACWI','IAGG','IUSB','IDV','GRID'].includes(t);
 }
 function isStockAsset(a){
  return !isETFAsset(a);
@@ -2932,23 +2935,19 @@ async function pullMarketWatch(){
   // populate the formulas automatically so the next pull can display the data.
   const formulaRows=[]; vals.forEach((r,i)=>{const ticker=String(r[0]||'').trim().toUpperCase();const exchange=String(r[2]||'').trim().toUpperCase();if(!ticker||!exchange||exchange==='FUND'||r[5]!==undefined&&String(r[5]).trim()!=='')return;const sym=`${gfExchange(exchange)}:${ticker}`;const gf=f=>`=IFERROR(GOOGLEFINANCE(\"${sym}\",\"${f}\"),\"\")`;formulaRows.push({row:i+2,values:[gf('price'),gf('change'),gf('changepct'),gf('tradetime'),gf('datadelay'),gf('priceopen'),gf('high'),gf('low'),gf('volume'),gf('marketcap'),gf('pe'),gf('eps'),gf('high52'),gf('low52')]});});
   if(formulaRows.length){for(const fr of formulaRows){await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!F${fr.row}:S${fr.row}?valueInputOption=USER_ENTERED`,{method:'PUT',body:JSON.stringify({range:`MarketWatch!F${fr.row}:S${fr.row}`,majorDimension:'ROWS',values:[fr.values]})});}}
-  const alreadySeeded=localStorage.getItem('market_sheet_top10_seeded_v1');
-  const merged=alreadySeeded?{list:next,changed:false}:mergeDefaultAssets(next);
-  if(merged.changed){
-   // The MarketWatch tab in this Google Sheet predates the Top 10 หุ้น tickers (it only has
-   // the old ETF list). Re-seed it with the full ticker set so GOOGLEFINANCE starts
-   // calculating prices for the missing ones too, instead of leaving the row empty forever.
-   MARKET_ASSETS=merged.list.map(a=>({...a,brandKey:a.brandKey||marketBrandKey(a)}));
-   localStorage.setItem('market_assets_v3982',JSON.stringify(MARKET_ASSETS));
-   await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!A:T:clear`,{method:'POST',body:'{}'});
-   await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!A1?valueInputOption=USER_ENTERED`,{method:'PUT',body:JSON.stringify({range:'MarketWatch!A1',majorDimension:'ROWS',values:marketFormulaRows()})});
-   GF_DATA={}; next.forEach(x=>GF_DATA[x.ticker]=x);
-   marketInitial(); next.forEach(x=>marketCard(x,x)); renderFinanceCards();
-   localStorage.setItem('market_sheet_top10_seeded_v1','1');
-   localStorage.setItem('market_last_update',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));
-   return;
+  // Google Sheets MarketWatch is the source of truth when connected.
+  // Never merge default tickers into the Sheet or clear/reseed user rows during a pull.
+  if(next.length){
+    MARKET_ASSETS=next.map(x=>({ticker:x.ticker,name:x.name,exchange:x.exchange,active:x.active,group:x.group,assetType:x.assetType,instrumentType:x.instrumentType,brandKey:x.brandKey||marketBrandKey(x)}));
+    localStorage.setItem('market_assets_v3982',JSON.stringify(MARKET_ASSETS));
+    GF_DATA={}; next.forEach(x=>GF_DATA[x.ticker]=x);
+    next.forEach(x=>{if(String(x.exchange).toUpperCase()==='FUND'){const code=canonicalFundCode(x.ticker);const n=FUND_NAV[code]||{};if(n.nav!=null){x.price=n.nav;x.changepct='';x.change='';GF_DATA[x.ticker]=x;}}});
+    marketInitial(); next.forEach(x=>marketCard(x,GF_DATA[x.ticker]||x)); renderFinanceCards();
+  }else{
+    // A successful Sheet read with no ticker rows should not silently show stale local data.
+    MARKET_ASSETS=[]; GF_DATA={}; localStorage.setItem('market_assets_v3982','[]');
+    marketInitial(); renderFinanceCards();
   }
-  if(next.length){const filtered=next;MARKET_ASSETS=filtered.map(x=>({ticker:x.ticker,name:x.name,exchange:x.exchange,active:x.active,group:x.group,brandKey:x.brandKey||marketBrandKey(x)}));localStorage.setItem('market_assets_v3982',JSON.stringify(MARKET_ASSETS));GF_DATA={};filtered.forEach(x=>GF_DATA[x.ticker]=x);filtered.forEach(x=>{if(String(x.exchange).toUpperCase()==='FUND'){const code=canonicalFundCode(x.ticker);const n=FUND_NAV[code]||{};if(n.nav!=null){x.price=n.nav;x.changepct='';x.change='';GF_DATA[x.ticker]=x;}}});marketInitial();filtered.forEach(x=>marketCard(x,GF_DATA[x.ticker]||x));renderFinanceCards();}
   localStorage.setItem('market_last_update',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));
  }catch(e){console.warn('MarketWatch',e);marketInitial();renderFinanceCards();}
 }
@@ -3334,8 +3333,8 @@ function renderFinanceCards(){
    if(portfolioSummary){portfolioSummary.hidden=false;portfolioSummary.style.display='grid';}
    if(document.getElementById('financePortfolioSummaryNote')){document.getElementById('financePortfolioSummaryNote').hidden=false;document.getElementById('financePortfolioSummaryNote').style.display='block';}
    if(portfolioHistory){portfolioHistory.hidden=false;portfolioHistory.style.display='block';}
-   if(portfolioActions){portfolioActions.hidden=false;portfolioActions.style.display='grid';}
-   portfolioControls.forEach(b=>{b.hidden=false;b.style.display='flex';});
+   if(portfolioActions){portfolioActions.hidden=true;portfolioActions.style.display='none';}
+   portfolioControls.forEach(b=>{b.hidden=true;b.style.display='none';});
  }else{
    // ETF / Stock are pure Market Watch views. Clear and hide every My Funds-only block
    // immediately so stale DOM from the previous tab can never remain visible.

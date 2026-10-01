@@ -1,4 +1,4 @@
-const CACHE='mff-shell-v24-wirocha-market-logos';
+const CACHE='mff-shell-v25-v81-logo-fallback';
 const SHELL=[
   './index.html','./shell.css','./config.js','./data-safety.js',
   './money/index.html','./money/daily.html','./money/monthly.html',
