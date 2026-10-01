@@ -1391,7 +1391,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V81 Logo Fallback Fix + V80 MarketWatch Sheet Source';
+const APP_BUILD = 'V82 Hide My Funds Summary History Fix + V80 MarketWatch Sheet Source';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -3328,13 +3328,13 @@ function renderFinanceCards(){
  // Portfolio data belongs ONLY to My Funds. ETF/Stock tabs are Market Watch and must never
  // inherit PlanMaster / Investments / Portfolio History data.
  if(isFundTab){
-   renderFinancePortfolioSummary();
-   renderFinancePortfolioHistory();
-   if(portfolioSummary){portfolioSummary.hidden=false;portfolioSummary.style.display='grid';}
-   if(document.getElementById('financePortfolioSummaryNote')){document.getElementById('financePortfolioSummaryNote').hidden=false;document.getElementById('financePortfolioSummaryNote').style.display='block';}
-   if(portfolioHistory){portfolioHistory.hidden=false;portfolioHistory.style.display='block';}
-   if(portfolioActions){portfolioActions.hidden=true;portfolioActions.style.display='none';}
-   portfolioControls.forEach(b=>{b.hidden=true;b.style.display='none';});
+  // Keep My Funds focused on the fund list; hide the summary and portfolio history blocks.
+  if(portfolioSummary){portfolioSummary.hidden=true;portfolioSummary.style.display='none';portfolioSummary.innerHTML='';}
+  const summaryNote=document.getElementById('financePortfolioSummaryNote');
+  if(summaryNote){summaryNote.hidden=true;summaryNote.style.display='none';summaryNote.textContent='';}
+  if(portfolioHistory){portfolioHistory.hidden=true;portfolioHistory.style.display='none';}
+  if(portfolioActions){portfolioActions.hidden=true;portfolioActions.style.display='none';}
+  portfolioControls.forEach(b=>{b.hidden=true;b.style.display='none';});
  }else{
    // ETF / Stock are pure Market Watch views. Clear and hide every My Funds-only block
    // immediately so stale DOM from the previous tab can never remain visible.

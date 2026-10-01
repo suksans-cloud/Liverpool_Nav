@@ -1,4 +1,4 @@
-const CACHE='mff-shell-v25-v81-logo-fallback';
+const CACHE='mff-shell-v26-v82-hide-portfolio-summary';
 const SHELL=[
   './index.html','./shell.css','./config.js','./data-safety.js',
   './money/index.html','./money/daily.html','./money/monthly.html',
