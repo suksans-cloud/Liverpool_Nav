@@ -1391,7 +1391,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V72 Safe Sheets Sync + Actual Q + Stable Logos';
+const APP_BUILD = 'V77 Safe Sync + PlanMaster + Stable Logos';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1668,8 +1668,11 @@ function mergeFundRecords(base, extra){
     const by=base.years[y]||(base.years[y]={months:{},planMonths:{},target:0});
     by.months=by.months||{}; by.planMonths=by.planMonths||{};
     const em=ey?.months||{}, ep=ey?.planMonths||{};
-    Object.entries(em).forEach(([m,v])=>{ if(Number(v)>0 && !(Number(by.months[m])>0)) by.months[m]=Number(v); });
-    Object.entries(ep).forEach(([m,v])=>{ if(Number(v)>0 && !(Number(by.planMonths[m])>0)) by.planMonths[m]=Number(v); });
+    // Duplicate Owner+Fund rows represent the same logical holding.  Never let
+    // whichever row happens to arrive first win.  Keep the largest monthly value
+    // from duplicate copies, then derive Q from the resulting 12 months.
+    Object.entries(em).forEach(([m,v])=>{ const n=Number(v)||0; if(n>Number(by.months[m]||0)) by.months[m]=n; });
+    Object.entries(ep).forEach(([m,v])=>{ const n=Number(v)||0; if(n>Number(by.planMonths[m]||0)) by.planMonths[m]=n; });
     if(!Number(by.target) && Number(ey?.target)) by.target=Number(ey.target);
     if(Number(ey?.masterTarget)>Number(by.target||0)) by.target=Number(ey.masterTarget);
     if(ey?.masterActual!==undefined && by.masterActual===undefined) by.masterActual=Number(ey.masterActual)||0;
@@ -1825,7 +1828,7 @@ function updateLastUpdated(){
   }
   const d=new Date(ts);
   el.textContent='อัปเดตล่าสุด: '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})+' • '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.';
-  el.textContent+=' · v76';
+  el.textContent+=' · v77';
 }
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3556,7 +3559,15 @@ function ensureSheetsClient(cid){
     sheetsClient=google.accounts.oauth2.initTokenClient({client_id:cid,scope:SHEETS_SCOPE,callback:async r=>{
       if(r.error){showToast('เชื่อมต่อ Google Sheets ไม่สำเร็จ');return;}
       sheetsToken=r.access_token; sheetsTokenExpiresAt=Date.now()+Math.max(60,(Number(r.expires_in)||3600)-60)*1000; window.MFFGoogleSession?.saveSheetsToken(sheetsToken,sheetsTokenExpiresAt); localStorage.setItem('google_sheets_connected','1');updateSheetUI('connected'); if(sheetsClient?._mffResolve){const rr=sheetsClient._mffResolve;sheetsClient._mffResolve=null;rr(true);}
-      try{if(!sheetId)await createSpreadsheet();await ensureSheetTabs();const remoteCount=await pullFromSheets({safeMerge:false});if(!remoteCount)await pushToSheets();await pullMarketWatch();showToast(remoteCount?'เชื่อมต่อ Google Sheets แล้ว • ใช้ข้อมูลจาก Sheet':'เชื่อมต่อ Google Sheets แล้ว • ส่งข้อมูลเริ่มต้นขึ้น Sheet');startSheetsAutoPull();}catch(e){console.error(e);showToast('เชื่อมต่อได้ แต่ซิงก์ไม่สำเร็จ');}
+      try{
+        let created=false;
+        if(!sheetId){await createSpreadsheet();created=true;}
+        await ensureSheetTabs();
+        if(created){ await pushToSheets(); showToast('สร้าง Google Sheets ใหม่และบันทึกข้อมูลเริ่มต้นแล้ว'); }
+        else { const remoteCount=await pullFromSheets({safeMerge:false}); showToast('เชื่อมต่อ Google Sheets แล้ว • ใช้ข้อมูลจาก Sheet'); }
+        await pullMarketWatch();
+        startSheetsAutoPull();
+      }catch(e){console.error(e);showToast('เชื่อมต่อได้ แต่ซิงก์ไม่สำเร็จ: '+(e?.message||e));}
     }});sheetsClient._cid=cid;
   }return sheetsClient;
 }
@@ -3609,11 +3620,65 @@ async function ensureSheetsAccess(interactive=true){
   });
 }
 
-async function pushToSheets(){if(!sheetsToken||!sheetId)return;updateSheetUI('syncing');const x=sheetRows();await ensureSheetTabs();
+async function readSheetSnapshot(){
+  const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=Funds%21A:I&ranges=FundMaster%21A:I&ranges=PlanMaster%21A:V&ranges=Investments%21A:L`);
+  const v=j.valueRanges||[];
+  return {funds:v[0]?.values||[],master:v[1]?.values||[],plan:v[2]?.values||[],inv:v[3]?.values||[]};
+}
+function validatePushSnapshot(x,remote){
+  const localFunds=(x.funds||[]).slice(1), remoteFunds=(remote.funds||[]).slice(1);
+  const localPlan=(x.plan||[]).slice(1), remotePlan=(remote.plan||[]).slice(1);
+  const localInv=(x.inv||[]).slice(1), remoteInv=(remote.inv||[]).slice(1);
+  const unique=(rows,ownerIdx,codeIdx)=>new Set(rows.map(r=>canonicalOwner(r[ownerIdx]||'')+'|'+fundMatchKey(r[codeIdx]||'')));
+  const lf=unique(localFunds,1,2), rf=unique(remoteFunds,1,2);
+  const lp=unique(localPlan,1,2), rp=unique(remotePlan,1,2);
+  const sumPlan=rows=>rows.reduce((s,r)=>s+MONTHS.reduce((a,_,i)=>a+sheetNum(r[4+i]),0),0);
+  const localPlanSum=sumPlan(localPlan), remotePlanSum=sumPlan(remotePlan);
+  const issues=[];
+  if(!localFunds.length && remoteFunds.length) issues.push('Funds ในแอปเป็น 0 แต่ Sheet มีข้อมูล');
+  if(lf.size < Math.max(1,Math.floor(rf.size*0.75))) issues.push(`จำนวนกองทุนลดลงผิดปกติ (${lf.size} จาก ${rf.size})`);
+  if(lp.size < Math.max(1,Math.floor(rp.size*0.75))) issues.push(`PlanMaster ลดลงผิดปกติ (${lp.size} จาก ${rp.size})`);
+  if(remotePlanSum>0 && localPlanSum < remotePlanSum*0.5) issues.push(`ยอดรายเดือนลดลงผิดปกติ (${Math.round(localPlanSum).toLocaleString('th-TH')} จาก ${Math.round(remotePlanSum).toLocaleString('th-TH')})`);
+  // Never allow an empty local Investments set to erase a non-empty cloud history.
+  if(!localInv.length && remoteInv.length) issues.push('Investments ในแอปเป็น 0 แต่ Sheet มีประวัติ');
+  return {ok:issues.length===0,issues,stats:{localFunds:lf.size,remoteFunds:rf.size,localPlan:lp.size,remotePlan:rp.size,localPlanSum,remotePlanSum,localInv:localInv.length,remoteInv:remoteInv.length}};
+}
+async function pushToSheets(){
+  if(!sheetsToken||!sheetId)return;
+  updateSheetUI('syncing');
+  const x=sheetRows();
+  await ensureSheetTabs();
+  let remote;
+  try{
+    remote=await readSheetSnapshot();
+    const check=validatePushSnapshot(x,remote);
+    if(!check.ok){
+      try{localStorage.setItem(STORAGE_KEY+'_blocked_push_backup',JSON.stringify({at:new Date().toISOString(),data:DATA,reason:check.issues,stats:check.stats}));}catch(e){}
+      updateSheetUI('connected');
+      throw new Error('หยุดการบันทึกเพื่อป้องกันข้อมูลหาย: '+check.issues.join(' • '));
+    }
+    // Keep a local recovery copy of the cloud snapshot before any destructive write.
+    try{localStorage.setItem('mff_sheet_backup_v77',JSON.stringify({at:new Date().toISOString(),snapshot:remote}));}catch(e){}
+  }catch(e){updateSheetUI('connected');throw e;}
   // NAV is maintained by Apps Script. Merge the live Sheet NAV into the outgoing FundMaster
   // rows so a normal portfolio save cannot overwrite a freshly updated NAV with stale local data.
-  try{const live=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/FundMaster!A:I`);const lr=live.values||[];const liveByCode={};(lr.slice(1)||[]).forEach(r=>{if(r[0])liveByCode[canonicalFundCode(r[0])]=r;});x.master.slice(1).forEach(r=>{const code=canonicalFundCode(r[0]);const l=liveByCode[code];if(l&&l[5]!==undefined&&l[5]!==''){r[5]=l[5];r[6]=l[6]||r[6];r[7]=l[7]||r[7];}});}catch(e){console.warn('Live NAV merge skipped',e);}
-  await clearAndWriteSheet('Funds',x.funds);await clearAndWriteSheet('FundMaster',x.master);await clearAndWriteSheet('PlanMaster',x.plan);await clearAndWriteSheet('Investments',x.inv);localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));updateSheetUI('connected');}
+  try{const live=remote?.master||[];const liveByCode={};(live.slice(1)||[]).forEach(r=>{if(r[0])liveByCode[canonicalFundCode(r[0])]=r;});x.master.slice(1).forEach(r=>{const code=canonicalFundCode(r[0]);const l=liveByCode[code];if(l&&l[5]!==undefined&&l[5]!==''){r[5]=l[5];r[6]=l[6]||r[6];r[7]=l[7]||r[7];}});}catch(e){console.warn('Live NAV merge skipped',e);}
+  await clearAndWriteSheet('Funds',x.funds);
+  await clearAndWriteSheet('FundMaster',x.master);
+  await clearAndWriteSheet('PlanMaster',x.plan);
+  await clearAndWriteSheet('Investments',x.inv);
+  localStorage.setItem('sheet_last_sync',new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));
+  updateSheetUI('connected');
+}
+function normalizeSheetYear(value){
+  const n=sheetNum(value);
+  if(!n) return 0;
+  // Google Sheets in this app may contain Buddhist years (e.g. 2569) while
+  // the browser state uses Gregorian years (e.g. 2026). Normalize at the
+  // boundary so Pull never creates a new zero-filled year.
+  return n>2400 && n<2700 ? n-543 : n;
+}
+
 // V73: the Sheets API returns cells as DISPLAYED text. A column formatted "#,##0" comes back as
 // "15,000", and Number("15,000") is NaN -> 0. That silently zeroed every amount >= 1,000
 // (Suksan/Wirocha/Phoom showed 0 or only the sub-1,000 rows). Parse displayed numbers safely.
@@ -3629,6 +3694,8 @@ function sheetNum(v){
 async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Error('not connected');updateSheetUI('syncing');
   try{localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync',localStorage.getItem(STORAGE_KEY)||'');localStorage.setItem(STORAGE_KEY+'_pre_sheet_sync_at',new Date().toISOString());}catch(e){}
   const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=Funds%21A:I&ranges=FundMaster%21A:I&ranges=PlanMaster%21A:V&ranges=Investments%21A:L&ranges=FundNAV_History%21A:H`),v=j.valueRanges||[],fr=v[0]?.values||[],mr=v[1]?.values||[],pr=v[2]?.values||[],ir=v[3]?.values||[],hr=v[4]?.values||[];
+  const remoteDataRows=(fr.length-1)+(pr.length-1)+(ir.length-1);
+  if(remoteDataRows<=0){ updateSheetUI('connected'); throw new Error('Google Sheets ไม่มีข้อมูลที่อ่านได้ จึงหยุด Pull เพื่อป้องกันข้อมูลในแอปหาย'); }
   let map=new Map();
   const masterByCode={};
   (mr.slice(1)||[]).forEach(r=>{if(!r[0])return;masterByCode[r[0]]={displayName:r[1]||r[0],officialName:r[2]||'',manager:r[3]||'',assetClass:r[4]||'',nav:(r[5]!==''&&r[5]!==undefined)?sheetNum(r[5]):undefined,date:r[6]||'',source:r[7]||'',active:String(r[8]).toUpperCase()!=='FALSE'};});
@@ -3642,7 +3709,7 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
   const planRows=[];
   const planByIdentity=new Map();
   (pr.slice(1)||[]).forEach(r=>{
-    if(!r[0]||!r[2])return; const y=Number(r[0]); if(!y)return;
+    if(!r[0]||!r[2])return; const y=normalizeSheetYear(r[0]); if(!y)return;
     const owner=canonicalOwner(r[1]||'');
     const code=canonicalFundCode(r[2]);
     const codeKey=fundMatchKey(code);
@@ -3665,24 +3732,24 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     // present, the monthly sum wins and Q will be rewritten from that sum.
     const monthlyActual=monthVals.reduce((a,b)=>a+b,0);
     const sheetActual=(r[16]!==undefined && r[16]!=='') ? sheetNum(r[16]) : 0;
-    const actual = monthlyActual>0 ? monthlyActual : sheetActual;
     const key=owner+'|'+fundMatchKey(code)+'|'+y;
     const prev=planByIdentity.get(key);
     if(prev){
-      monthVals.forEach((v,i)=>{ if(Number(v)>0 && !(Number(prev.months[i])>0)) prev.months[i]=Number(v); });
-      // Duplicate PlanMaster rows are copies of the same Owner+Fund+Year record.
-      // Keep the largest explicit Q instead of recalculating Q from E:P, which can
-      // silently turn an actual value such as E-Saving 6,500 into a plan subtotal.
-      if(Number(actual)>Number(prev.actual||0)) prev.actual=Number(actual)||0;
+      monthVals.forEach((v,i)=>{ const n=Number(v)||0; if(n>Number(prev.months[i]||0)) prev.months[i]=n; });
+      // Q is derived from E:P whenever at least one monthly cell exists.  Only
+      // use legacy Q when the entire row has no monthly values at all.
+      const mergedMonthly=prev.months.reduce((a,b)=>a+(Number(b)||0),0);
+      prev.actual=mergedMonthly>0 ? mergedMonthly : Math.max(Number(prev.actual)||0,sheetActual);
       prev.target=Math.max(Number(prev.target)||0,sheetNum(r[17]));
       if(!prev.pct && r[18]!==undefined) prev.pct=String(r[18]??'');
       if(String(r[3]??'').trim()) prev.displayName=String(r[3]).trim();
     }else{
+      const actual=monthlyActual>0 ? monthlyActual : sheetActual;
       const row={f,y,months:monthVals,actual,target:sheetNum(r[17]),pct:String(r[18]??''),displayName:String(r[3]??'').trim()};
       planByIdentity.set(key,row); planRows.push(row);
     }
   });
-  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f)f.transactions.push({id:r[0],date:r[1],year:Number(r[2]),month:Number(r[3]),amount:sheetNum(r[8]??r[7]),note:String(r[9]??''),units:sheetNum(r[10]),purchaseNav:sheetNum(r[11])});});
+  (ir.slice(1)||[]).forEach(r=>{const f=map.get(r[5]);if(f){ const txYear=normalizeSheetYear(r[2])||Number(String(r[1]||'').slice(0,4)); const txMonth=Number(r[3])||Number(String(r[1]||'').slice(5,7))||1; f.transactions.push({id:r[0],date:r[1],year:txYear,month:txMonth,amount:sheetNum(r[8]??r[7]),note:String(r[9]??''),units:sheetNum(r[10]),purchaseNav:sheetNum(r[11])}); }});
   // One Portfolio record per Owner + Fund Code. Different owners may still hold the same fund.
   const beforeFundDedupCount=map.size;
   const dedupedRemoteFunds=dedupeFundsByOwnerCode([...map.values()]);
@@ -3753,7 +3820,7 @@ async function reconcileTransactionUnitsToSheets(options={}){
   return true;
 }
 
-function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v76] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
+function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v77] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
    เก็บฟังก์ชันไว้เป็น no-op กันโค้ดจุดอื่นที่ยังเรียกอยู่พัง แต่ไม่ทำอะไรจริง
@@ -3979,7 +4046,7 @@ if('serviceWorker' in navigator){
       }else if(!window.SESSION_PULLED){
         showToast('แสดงข้อมูลที่เก็บในเครื่อง ยังไม่ตรงกับ Sheet — กดซิงค์เพื่อดึงข้อมูลล่าสุด');
       }
-    }catch(e){console.warn('[v76] boot pull failed',e);}
+    }catch(e){console.warn('[v77] boot pull failed',e);}
     finally{busy=false;}
   }
   window.addEventListener('load',()=>setTimeout(bootPull,600));
