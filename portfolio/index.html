@@ -1391,7 +1391,7 @@ html,body{max-width:100%;overflow-x:hidden}
 <script>
 /* ================= DATA ================= */
 const STORAGE_KEY = 'khlangthun_portfolio_oldui_latest_v4';
-const APP_BUILD = 'V77 Safe Sync + PlanMaster + Stable Logos';
+const APP_BUILD = 'V78 Safe Pull + No Auto Push + Data Integrity';
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CURRENT_YEAR = new Date().getFullYear();
 let selectedYear = CURRENT_YEAR;
@@ -1828,13 +1828,14 @@ function updateLastUpdated(){
   }
   const d=new Date(ts);
   el.textContent='อัปเดตล่าสุด: '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})+' • '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.';
-  el.textContent+=' · v77';
+  el.textContent+=' · v78';
 }
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   localStorage.setItem(STORAGE_KEY+'_last_updated', new Date().toISOString());
   updateLastUpdated();
-  scheduleSheetsPush();
+  // V78: local edits must never silently overwrite the Google Sheet.
+  // Cloud writes happen only from the explicit Save/Push action after validation.
 }
 let DATA = loadData();
 updateLastUpdated();
@@ -2196,8 +2197,17 @@ function brandKeyForFund(f){
   if(meta.assetClass==='ETF') return 'etf';
   return 'fund';
 }
+function normalizeMasterBrandKey(value){
+  const raw=String(value||'').trim();
+  if(!raw) return '';
+  if(/^https?:\/\//i.test(raw)) return 'url:'+raw;
+  const k=raw.toLowerCase().replace(/[^a-z0-9]+/g,'');
+  const map={vanguard:'vanguard',vanguardgroup:'vanguard',schwab:'schwab',charlesschwab:'schwab',invesco:'invesco',neos:'neos',spdr:'spdr',statestreet:'spdr',ishares:'ishares',blackrock:'ishares',globalx:'globalx',scb:'scb',scbam:'scb',talis:'talis',kkp:'kkp',krungsri:'krungsri',kasset:'kasset',kasikorn:'kasset',morningstar:'morningstar',apple:'apple',microsoft:'microsoft',nvidia:'nvidia',google:'google',amazon:'amazon',meta:'meta',broadcom:'broadcom',berkshire:'berkshire'};
+  return map[k]||raw.toLowerCase();
+}
 function marketBrandKey(a){
-  const persisted=String(a?.brandKey||'').trim().toLowerCase();
+  const persisted=normalizeMasterBrandKey(a?.brandKey||a?.logo||a?.logoUrl||a?.brand||'');
+  if(persisted && persisted!=='fund' && persisted!=='etf') return persisted;
   const code=String(a?.ticker||a?.name||'').trim().toUpperCase();
   const direct={
     // ETF issuers — keep this list explicit so Finance and ETF Watch use the same brand.
@@ -2211,7 +2221,6 @@ function marketBrandKey(a){
     'MU':'micron','NBIS':'nebius','CPALL':'cpall','BBL':'bbl',
     'NFLX':'netflix','ORCL':'oracle','COST':'costco','CRM':'salesforce','TSM':'tsmc','INTC':'intel','QCOM':'qualcomm','AMAT':'appliedmaterials','ARM':'arm','PLTR':'palantir','COIN':'coinbase'
   };
-  // Known ticker mappings always win over a stale/wrong Sheet Brand Key.
   if(direct[code]) return direct[code];
   // Issuer/name fallback. Do this before trusting any persisted Sheet Brand Key:
   // a stale Brand Key is exactly what caused logos to change after refresh.
@@ -2226,11 +2235,14 @@ function marketBrandKey(a){
   // Unknown market tickers still get a stable visual identity instead of the
   // generic fund M badge. The ticker itself is the deterministic fallback.
   if(code) return 'ticker:'+code;
-  if(persisted && persisted!=='fund' && persisted!=='etf') return persisted;
   return 'fund';
 }
 function brandLogoSvg(key){
   const rawKey=String(key||'');
+  if(/^url:https?:\/\//i.test(rawKey)){
+    const src=rawKey.slice(4).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return `<svg viewBox="0 0 64 64" aria-label="Logo"><rect width="64" height="64" rx="14" fill="#fff"/><image href="${src}" x="5" y="5" width="54" height="54" preserveAspectRatio="xMidYMid meet"/></svg>`;
+  }
   if(rawKey.indexOf('ticker:')===0){
     const ticker=rawKey.slice(7).replace(/[^A-Z0-9.\-]/g,'').slice(0,7)||'—';
     return `<svg viewBox="0 0 64 64" aria-label="${ticker}"><rect width="64" height="64" rx="14" fill="#eef3f7"/><text x="32" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="${ticker.length>5?11:15}px" font-weight="900" fill="#17324d">${ticker}</text></svg>`;
@@ -2819,8 +2831,15 @@ let GF_DATA={};
 try{const c=JSON.parse(localStorage.getItem('market_quotes_cache_v1')||'{}');if(c&&typeof c==='object')GF_DATA=c;}catch(e){}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function isETFAsset(a){
- const g=String(a?.group||'').toLowerCase(); const n=String(a?.name||'').toLowerCase(); const t=String(a?.ticker||'').toUpperCase();
- return g.includes('etf') || n.includes(' etf') || n.endsWith('etf') || ['VOO','VXUS','QQQM','VT','VTI','SCHD'].includes(t);
+ const g=String(a?.group||'').trim().toLowerCase();
+ const n=String(a?.name||'').trim().toLowerCase();
+ const t=String(a?.ticker||'').trim().toUpperCase();
+ const assetType=String(a?.assetType||a?.assetClass||'').trim().toLowerCase();
+ const masterKind=String(a?.instrumentType||'').trim().toLowerCase();
+ return /\betf\b|exchange\s*-?\s*traded/.test(g) || /\betf\b|exchange\s*-?\s*traded/.test(n) ||
+        /\betf\b|exchange\s*-?\s*traded/.test(assetType) || /\betf\b/.test(masterKind) ||
+        ['ETF','EXCHANGE TRADED FUND','กองทุน ETF','อีทีเอฟ'].includes(String(a?.group||'').trim().toUpperCase()) ||
+        ['VOO','VXUS','QQQM','VT','VTI','SCHD'].includes(t);
 }
 function isStockAsset(a){
  return !isETFAsset(a);
@@ -2885,9 +2904,9 @@ function marketFormulaRows(){
 async function ensureMarketSheet(){
  if(!sheetsToken||!sheetId)return false; const meta=await getSpreadsheetMeta(),titles=(meta.sheets||[]).map(s=>s.properties.title);
  if(!titles.includes('MarketWatch')) await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}:batchUpdate`,{method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'MarketWatch'}}}]})});
- const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!A1:T200`);
+ const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!A1:T5000`);
  const vals=j.values||[];
- const validHeader=vals.length>=1 && String(vals[0][0]||'')==='Ticker' && String(vals[0][2]||'')==='Exchange' && String(vals[0][5]||'')==='Price' && String(vals[0][19]||'')==='Brand Key';
+ const headerNames=(vals[0]||[]).map(x=>String(x||'').trim().toLowerCase()); const validHeader=headerNames.includes('ticker') && headerNames.includes('exchange');
  // Reading MarketWatch must be non-destructive. Do not clear/reseed a user's
  // Sheet just because an older header is missing the optional Brand Key column.
  if(!validHeader) return false;
@@ -2900,8 +2919,14 @@ async function pullMarketWatch(){
   MARKET_ASSETS.forEach(x=>{if(String(x.exchange).toUpperCase()==='FUND'){const n=FUND_NAV[canonicalFundCode(x.ticker)]||{};if(n.nav!=null)GF_DATA[x.ticker]={price:n.nav,date:n.date,source:n.source};}});
   marketInitial();renderFinanceCards();return;
  }
- try{const marketReady=await ensureMarketSheet(); if(!marketReady){ marketInitial(); renderFinanceCards(); return; } const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=MarketWatch%21A2:T200`);const vals=j.valueRanges?.[0]?.values||[];
-  const next=[]; vals.forEach(r=>{if(!r[0])return;const ticker=String(r[0]).trim().toUpperCase();const exchange=String(r[2]||'').trim().toUpperCase();let group=String(r[4]||'').trim();if(!group) group=isETFAsset({ticker,exchange})?'ETF':(exchange==='FUND'?'กองทุน':'หุ้น');next.push({ticker,name:String(r[1]||r[0]),exchange,active:String(r[3]).toUpperCase()!=='FALSE',group,brandKey:String(r[19]||'').trim().toLowerCase(),price:r[5],change:r[6],changepct:r[7],tradetime:r[8],datadelay:r[9],open:r[10],high:r[11],low:r[12],volume:r[13],marketcap:r[14],pe:r[15],eps:r[16],high52:r[17],low52:r[18]});});
+ try{const marketReady=await ensureMarketSheet(); if(!marketReady){ marketInitial(); renderFinanceCards(); return; } const j=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values:batchGet?ranges=MarketWatch%21A2:T5000`);const vals=j.valueRanges?.[0]?.values||[];
+  const headerJ=await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/MarketWatch!A1:T1`);
+  const headers=(headerJ.values?.[0]||[]).map(x=>String(x||'').trim().toLowerCase());
+  const col=(...names)=>{for(const n of names){const i=headers.indexOf(String(n).toLowerCase());if(i>=0)return i;}return -1;};
+  const ci={ticker:col('ticker'),name:col('name','display name'),exchange:col('exchange'),active:col('active','enabled'),group:col('group','asset type','asset class','instrument type','type'),assetType:col('asset type','asset class'),instrumentType:col('instrument type','type'),brand:col('brand key','brand','logo key','logo','logo url','logo_url'),price:col('price'),change:col('change'),changepct:col('change %','change%','changepct'),tradetime:col('trade time','tradetime'),datadelay:col('data delay','datadelay'),open:col('open'),high:col('high'),low:col('low'),volume:col('volume'),marketcap:col('market cap','marketcap'),pe:col('p/e','pe'),eps:col('eps'),high52:col('52w high','high52'),low52:col('52w low','low52')};
+  if(ci.ticker<0) throw new Error('MarketWatch: missing Ticker column');
+  const get=(r,i,legacy)=>i>=0?r[i]:(r[legacy]??'');
+  const next=[]; vals.forEach(r=>{const ticker=String(get(r,ci.ticker,0)||'').trim().toUpperCase();if(!ticker)return;const exchange=String(get(r,ci.exchange,2)||'').trim().toUpperCase();let group=String(get(r,ci.group,4)||'').trim();const assetType=String(get(r,ci.assetType,-1)||'').trim();const instrumentType=String(get(r,ci.instrumentType,-1)||'').trim();const name=String(get(r,ci.name,1)||ticker);if(!group) group=isETFAsset({ticker,name,assetType,instrumentType,exchange})?'ETF':(exchange==='FUND'?'กองทุน':'หุ้น');const brandValue=get(r,ci.brand,19);next.push({ticker,name,exchange,active:String(get(r,ci.active,3)||'TRUE').toUpperCase()!=='FALSE',group,assetType,instrumentType,brandKey:String(brandValue||'').trim(),price:get(r,ci.price,5),change:get(r,ci.change,6),changepct:get(r,ci.changepct,7),tradetime:get(r,ci.tradetime,8),datadelay:get(r,ci.datadelay,9),open:get(r,ci.open,10),high:get(r,ci.high,11),low:get(r,ci.low,12),volume:get(r,ci.volume,13),marketcap:get(r,ci.marketcap,14),pe:get(r,ci.pe,15),eps:get(r,ci.eps,16),high52:get(r,ci.high52,17),low52:get(r,ci.low52,18)});});
   // Allow users to add a new ticker directly in Google Sheets by entering only
   // Ticker / Name / Exchange / Active / Group. If GOOGLEFINANCE cells are blank,
   // populate the formulas automatically so the next pull can display the data.
@@ -3770,6 +3795,31 @@ async function pullFromSheets(options={}){if(!sheetsToken||!sheetId)throw new Er
     });
     map=remoteById;
   }
+  // V78: transactional Pull guard. Never replace a healthy local dataset with a
+  // suspiciously empty/partial Sheet snapshot. This is separate from Push validation
+  // because the dangerous failure was happening in the opposite direction: Sheet -> App.
+  const currentFunds=dedupeFundsByOwnerCode(DATA?.funds||[]);
+  const currentFundCount=currentFunds.length;
+  const currentPlanSum=currentFunds.reduce((sum,f)=>{
+    const yd=yearData(f,selectedYear,true);
+    return sum+Object.values(yd.planMonths||{}).reduce((a,b)=>a+(Number(b)||0),0);
+  },0);
+  const candidateFundCount=dedupeFundsByOwnerCode([...map.values()]).length;
+  const candidatePlanSum=planRows.reduce((sum,r)=>sum+Object.values(r.months||{}).reduce((a,b)=>a+(Number(b)||0),0),0);
+  const candidateInvCount=[...map.values()].reduce((n,f)=>n+(f.transactions||[]).length,0);
+  const currentInvCount=currentFunds.reduce((n,f)=>n+(f.transactions||[]).length,0);
+  const pullIssues=[];
+  if(currentFundCount>0 && candidateFundCount===0) pullIssues.push('Sheet ไม่พบกองทุนที่ใช้งานอยู่');
+  if(currentFundCount>=4 && candidateFundCount < Math.max(1,Math.floor(currentFundCount*0.50))) pullIssues.push(`จำนวนกองทุนจาก Sheet ลดลงผิดปกติ (${candidateFundCount} จาก ${currentFundCount})`);
+  if(currentPlanSum>0 && candidatePlanSum===0) pullIssues.push(`ยอดเงินรายเดือนจาก Sheet เป็น 0 แต่ข้อมูลในแอปมี ${Math.round(currentPlanSum).toLocaleString('th-TH')}`);
+  if(currentPlanSum>=1000 && candidatePlanSum < currentPlanSum*0.25) pullIssues.push(`ยอดรายเดือนจาก Sheet ลดลงผิดปกติ (${Math.round(candidatePlanSum).toLocaleString('th-TH')} จาก ${Math.round(currentPlanSum).toLocaleString('th-TH')})`);
+  if(currentInvCount>=3 && candidateInvCount===0) pullIssues.push('ประวัติ Investments จาก Sheet หายทั้งหมด');
+  if(pullIssues.length){
+    try{localStorage.setItem(STORAGE_KEY+'_blocked_pull_backup',JSON.stringify({at:new Date().toISOString(),local:DATA,reason:pullIssues,stats:{currentFundCount,candidateFundCount,currentPlanSum,candidatePlanSum,currentInvCount,candidateInvCount}}));}catch(e){}
+    updateSheetUI('connected');
+    throw new Error('หยุดการดึงข้อมูลเพื่อป้องกันข้อมูลหาย: '+pullIssues.join(' • '));
+  }
+
   map.forEach(rebuildFundMonths);
   map.forEach(f=>(f.transactions||[]).forEach(t=>enrichTransactionUnits(t,f.name)));
   // Apply PlanMaster after rebuilding actual transactions. The monthly table is the plan view,
@@ -3812,15 +3862,18 @@ async function reconcileTransactionUnitsToSheets(options={}){
   localStorage.setItem(STORAGE_KEY+'_last_updated', new Date().toISOString());
   updateLastUpdated();
   renderAll();
-  if(sheetsToken&&sheetId){
-    try{ await pushToSheets(); }
-    catch(e){ console.warn('Transaction unit reconciliation sync failed',e); }
-  }
+  // V78: reconciliation is local-only. It must never trigger a cloud write implicitly.
+  // The user can explicitly press Save/Push after reviewing the result.
+
   if(!options.silent) showToast('เติม NAV ซื้อและจำนวนหน่วยจาก NAV History แล้ว');
   return true;
 }
 
-function scheduleSheetsPush(){clearTimeout(scheduleSheetsPush._tm);if(!sheetsToken||!sheetId)return;scheduleSheetsPush._tm=setTimeout(()=>(window.SESSION_PULLED?pushToSheets():Promise.resolve(console.warn('[v77] auto-push blocked: pull from Sheets first'))).catch(()=>showToast('ซิงก์ Google Sheets ไม่สำเร็จ')),1800);}
+function scheduleSheetsPush(){
+  // V78: intentionally disabled. A delayed auto-push was one of the paths that
+  // could write a partially rebuilt local DATA object back over a good Sheet.
+  clearTimeout(scheduleSheetsPush._tm);
+}
 
 /* ---- ซิงก์เป็นแบบแมนนวลเท่านั้น (ไม่มี auto-pull พื้นหลังแล้ว) ----
    เก็บฟังก์ชันไว้เป็น no-op กันโค้ดจุดอื่นที่ยังเรียกอยู่พัง แต่ไม่ทำอะไรจริง
@@ -4020,8 +4073,8 @@ if('serviceWorker' in navigator){
 }
 
 
-/* ================= V73 BOOT SYNC =================
-   Previously the app only showed whatever was cached in localStorage and never
+/* ================= V78 BOOT SYNC =================
+   The app may read the Sheet on load when a valid session token exists, but V78 validates the incoming snapshot before replacing local DATA.
    re-read the Sheet (auto-pull was disabled and the OAuth token lives in
    sessionStorage), so every page drifted from the Sheet. Now: on load / when the
    tab becomes visible, if a valid session token exists, pull Sheet -> app
